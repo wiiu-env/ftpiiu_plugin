@@ -2,3 +2,5 @@ build/*
 *.mod
 sysapp.layout
 sysapp.cbp
+*.elf
+*.wps
