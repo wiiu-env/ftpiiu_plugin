@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CThread.h"
-#include "CMutex.h"
 #include <wut_types.h>
+#include <mutex>
 
 class BackgroundThreadWrapper: public CThread {
 public:
@@ -16,7 +16,7 @@ protected:
     void setThreadPriority(int32_t priority) {
        this->setThreadPriority(priority);
     }
-    CMutex mutex;
+    std::recursive_mutex mutex;
 private:
     void executeThread();
 
