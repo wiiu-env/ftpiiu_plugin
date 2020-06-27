@@ -4,3 +4,4 @@ sysapp.layout
 sysapp.cbp
 *.elf
 *.wps
+.idea/
