@@ -25,6 +25,7 @@
 #include <whb/libmanager.h>
 #include "utils/logger.h"
 #include "utils/utils.h"
+#include <whb/log_udp.h>
 
 #include "virtualpath.h"
 #include "net.h"
@@ -59,7 +60,7 @@ ON_APPLICATION_START(args) {
 
     ACGetAssignedAddress(&hostIpAddress);
 
-    log_init();
+    WHBLogUdpInit();
 
     //!*******************************************************************
     //!                        Initialize FS                             *
@@ -67,22 +68,22 @@ ON_APPLICATION_START(args) {
 
     int fsaFd = -1;
 
-    DEBUG_FUNCTION_LINE("IOSUHAX_Open\n");
+    DEBUG_FUNCTION_LINE("IOSUHAX_Open");
     int res = IOSUHAX_Open(NULL);
     if(res < 0) {
-        DEBUG_FUNCTION_LINE("IOSUHAX_open failed\n");
+        DEBUG_FUNCTION_LINE("IOSUHAX_open failed");
         VirtualMountDevice("fs:/");
     } else {
         iosuhaxMount = 1;
         //fatInitDefault();
 
-        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open\n");
+        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open");
         fsaFd = IOSUHAX_FSA_Open();
         if(fsaFd < 0) {
-            DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open failed\n");
+            DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open failed");
         }
 
-        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open\n");
+        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open");
 
         mount_fs("slccmpt01", fsaFd, "/dev/slccmpt01", "/vol/storage_slccmpt01");
         mount_fs("storage_odd_tickets", fsaFd, "/dev/odd01", "/vol/storage_odd_tickets");
@@ -114,7 +115,7 @@ void stopThread(){
 }
 
 ON_APPLICATION_END(){
-    DEBUG_FUNCTION_LINE("Ending ftp server\n");
+    DEBUG_FUNCTION_LINE("Ending ftp server");
     stopThread();
 
     if(iosuhaxMount) {

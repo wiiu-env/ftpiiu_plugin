@@ -12,17 +12,17 @@
 BackgroundThread * BackgroundThread::instance = NULL;
 
 BackgroundThread::BackgroundThread(): BackgroundThreadWrapper(BackgroundThread::getPriority()) {
-    DEBUG_FUNCTION_LINE("Create new Server\n");
+    DEBUG_FUNCTION_LINE("Create new Server");
     mutex.lock();
         this->serverSocket = create_server(PORT);
         DCFlushRange(&(this->serverSocket), 4);
     mutex.unlock();
-    DEBUG_FUNCTION_LINE("handle %d\n", this->serverSocket);
+    DEBUG_FUNCTION_LINE("handle %d", this->serverSocket);
     resumeThread();
 }
 
 BackgroundThread::~BackgroundThread() {
-    DEBUG_FUNCTION_LINE("Clean up FTP\n");
+    DEBUG_FUNCTION_LINE("Clean up FTP");
     if(this->serverSocket != -1){
         mutex.lock();
             cleanup_ftp();
@@ -30,7 +30,7 @@ BackgroundThread::~BackgroundThread() {
         mutex.unlock();
         this->serverSocket = -1;
     }
-    DEBUG_FUNCTION_LINE("Cleaned up FTP\n");
+    DEBUG_FUNCTION_LINE("Cleaned up FTP");
 }
 
 BOOL BackgroundThread::whileLoop() {
@@ -39,7 +39,7 @@ BOOL BackgroundThread::whileLoop() {
             network_down = process_ftp_events(this->serverSocket);
         mutex.unlock();
         if(network_down) {
-            DEBUG_FUNCTION_LINE("Network is down %d\n", this->serverSocket);
+            DEBUG_FUNCTION_LINE("Network is down %d", this->serverSocket);
             mutex.lock();
                 cleanup_ftp();
                 network_close(this->serverSocket);

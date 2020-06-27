@@ -12,19 +12,19 @@ BackgroundThreadWrapper::BackgroundThreadWrapper(int32_t priority): CThread(CThr
 BackgroundThreadWrapper::~BackgroundThreadWrapper() {
     exitThread = 1;
     DCFlushRange((void*)&exitThread, 4);
-    DEBUG_FUNCTION_LINE("Exit thread\n");
+    DEBUG_FUNCTION_LINE("Exit thread");
 }
 
 void BackgroundThreadWrapper::executeThread() {
     while (1) {
         if(exitThread) {
-            DEBUG_FUNCTION_LINE("We want to exit\n");
+            DEBUG_FUNCTION_LINE("We want to exit");
             break;
         }
         if(!whileLoop()){
             break;
         }
     }
-    DEBUG_FUNCTION_LINE("Exit!\n");
+    DEBUG_FUNCTION_LINE("Exit!");
 }
 
