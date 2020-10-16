@@ -5,3 +5,5 @@ sysapp.cbp
 *.elf
 *.wps
 .idea/
+cmake-build-debug/
+CMakeLists.txt

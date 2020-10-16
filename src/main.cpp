@@ -66,8 +66,6 @@ ON_APPLICATION_START(args) {
     //!                        Initialize FS                             *
     //!*******************************************************************
 
-    int fsaFd = -1;
-
     DEBUG_FUNCTION_LINE("IOSUHAX_Open");
     int res = IOSUHAX_Open(NULL);
     if(res < 0) {
@@ -83,7 +81,7 @@ ON_APPLICATION_START(args) {
             DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open failed");
         }
 
-        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open");
+        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open done");
 
         mount_fs("slccmpt01", fsaFd, "/dev/slccmpt01", "/vol/storage_slccmpt01");
         mount_fs("storage_odd_tickets", fsaFd, "/dev/odd01", "/vol/storage_odd_tickets");
