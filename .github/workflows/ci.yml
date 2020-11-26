@@ -25,8 +25,8 @@ jobs:
     - name: Get environment variables
       id: get_repository_name
       run: |
-        echo ::set-env name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
-        echo ::set-env name=DATETIME::$(echo $(date '+%Y%m%d-%H%M%S'))   
+        echo REPOSITORY_NAME=$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//") >> $GITHUB_ENV
+        echo DATETIME=$(echo $(date '+%Y%m%d-%H%M%S')) >> $GITHUB_ENV
     - uses: actions/download-artifact@master
       with:
         name: binary
