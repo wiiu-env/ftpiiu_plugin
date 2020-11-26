@@ -44,7 +44,7 @@ WUPS_USE_WUT_CRT()
 
 uint32_t hostIpAddress = 0;
 int iosuhaxMount = 0;
-int fsaFd = 0;
+int fsaFd = -1;
 
 BackgroundThread * thread = NULL;
 
