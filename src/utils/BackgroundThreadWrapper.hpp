@@ -6,19 +6,19 @@
 
 class BackgroundThreadWrapper: public CThread {
 public:
-    BackgroundThreadWrapper(int32_t priority);
-    virtual ~BackgroundThreadWrapper();
+    explicit BackgroundThreadWrapper(int32_t priority);
+    ~BackgroundThreadWrapper() override;
 protected:
-    BOOL shouldExit() {
+    [[nodiscard]] BOOL shouldExit() const {
         return (exitThread == 1);
     }
 
-    void setThreadPriority(int32_t priority) {
-       this->setThreadPriority(priority);
+    void setThreadPriority(int32_t priority) override {
+        CThread::setThreadPriority(priority);
     }
     std::recursive_mutex mutex;
 private:
-    void executeThread();
+    void executeThread() override;
 
     /**
         Called when a connection has be accepted.

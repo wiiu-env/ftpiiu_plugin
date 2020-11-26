@@ -60,6 +60,8 @@ ON_APPLICATION_START(args) {
 
     ACGetAssignedAddress(&hostIpAddress);
 
+    nn::ac::Finalize();
+
     WHBLogUdpInit();
 
     //!*******************************************************************
@@ -67,7 +69,7 @@ ON_APPLICATION_START(args) {
     //!*******************************************************************
 
     DEBUG_FUNCTION_LINE("IOSUHAX_Open");
-    int res = IOSUHAX_Open(NULL);
+    int res = IOSUHAX_Open(nullptr);
     if(res < 0) {
         DEBUG_FUNCTION_LINE("IOSUHAX_open failed");
         VirtualMountDevice("fs:/");

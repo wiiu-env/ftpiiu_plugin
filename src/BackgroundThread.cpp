@@ -9,7 +9,7 @@
 #include "ftp.h"
 #include "net.h"
 
-BackgroundThread * BackgroundThread::instance = NULL;
+BackgroundThread * BackgroundThread::instance = nullptr;
 
 BackgroundThread::BackgroundThread(): BackgroundThreadWrapper(BackgroundThread::getPriority()) {
     DEBUG_FUNCTION_LINE("Create new Server");
@@ -18,7 +18,7 @@ BackgroundThread::BackgroundThread(): BackgroundThreadWrapper(BackgroundThread::
         DCFlushRange(&(this->serverSocket), 4);
     mutex.unlock();
     DEBUG_FUNCTION_LINE("handle %d", this->serverSocket);
-    resumeThread();
+    CThread::resumeThread();
 }
 
 BackgroundThread::~BackgroundThread() {
@@ -47,7 +47,7 @@ BOOL BackgroundThread::whileLoop() {
                 DCFlushRange(&(this->serverSocket), 4);
             mutex.unlock();
         }
-        OSSleepTicks(OSMillisecondsToTicks(16));
     }
+    OSSleepTicks(OSMillisecondsToTicks(16));
     return true;
 }
