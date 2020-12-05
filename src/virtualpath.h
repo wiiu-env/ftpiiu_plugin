@@ -47,8 +47,16 @@ typedef struct {
 extern VIRTUAL_PARTITION * VIRTUAL_PARTITIONS;
 extern uint8_t MAX_VIRTUAL_PARTITIONS;
 
+extern VIRTUAL_PARTITION * VIRTUAL_FS;
+extern uint8_t MAX_VIRTUAL_FS;
+
+extern VIRTUAL_PARTITION * VIRTUAL_FS_VOL;
+extern uint8_t MAX_VIRTUAL_FS_VOL;
+
 void VirtualMountDevice(const char * devicepath);
 void AddVirtualPath(const char *name, const char *alias, const char *prefix);
+void AddVirtualFSPath(const char *name, const char *alias, const char *prefix);
+void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix);
 void MountVirtualDevices();
 void UnmountVirtualPaths();
 

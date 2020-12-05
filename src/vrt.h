@@ -37,6 +37,8 @@ typedef struct
 	DIR *dir;
 	char *path;
 	uint8_t virt_root;
+	uint8_t virtual_fs;
+	uint8_t virtual_fs_vol;
 } DIR_P;
 
 char *to_real_path(char *virtual_cwd, char *virtual_path);

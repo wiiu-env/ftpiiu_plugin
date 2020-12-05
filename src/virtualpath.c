@@ -32,7 +32,13 @@
 #include "utils/logger.h"
 
 uint8_t MAX_VIRTUAL_PARTITIONS = 0;
-VIRTUAL_PARTITION * VIRTUAL_PARTITIONS = NULL;
+VIRTUAL_PARTITION *VIRTUAL_PARTITIONS = NULL;
+
+uint8_t MAX_VIRTUAL_FS = 0;
+VIRTUAL_PARTITION *VIRTUAL_FS = NULL;
+
+uint8_t MAX_VIRTUAL_FS_VOL = 0;
+VIRTUAL_PARTITION *VIRTUAL_FS_VOL = NULL;
 
 void VirtualMountDevice(const char * path)
 {
@@ -90,6 +96,45 @@ void AddVirtualPath(const char *name, const char *alias, const char *prefix)
 
 	MAX_VIRTUAL_PARTITIONS++;
 }
+
+
+ void AddVirtualFSPath(const char *name, const char *alias, const char *prefix) {
+     if (!VIRTUAL_FS) {
+         VIRTUAL_FS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+     }
+
+     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS + 1));
+     if (!tmp) {
+         free(VIRTUAL_FS);
+         MAX_VIRTUAL_FS = 0;
+         return;
+     }
+
+     VIRTUAL_FS = tmp;
+
+     VIRTUAL_FS[MAX_VIRTUAL_FS].name = strdup(name);
+
+     MAX_VIRTUAL_FS++;
+ }
+
+ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix) {
+     if (!VIRTUAL_FS_VOL) {
+         VIRTUAL_FS_VOL = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+     }
+
+     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS_VOL, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS_VOL + 1));
+     if (!tmp) {
+         free(VIRTUAL_FS_VOL);
+         MAX_VIRTUAL_FS_VOL = 0;
+         return;
+     }
+
+     VIRTUAL_FS_VOL = tmp;
+
+     VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].name = strdup(name);
+
+     MAX_VIRTUAL_FS_VOL++;
+ }
 
 void MountVirtualDevices()
 {

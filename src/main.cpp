@@ -104,6 +104,10 @@ ON_APPLICATION_START(args) {
         VirtualMountDevice("storage_mlc:/");
         VirtualMountDevice("storage_usb:/");
         VirtualMountDevice("usb:/");
+
+        AddVirtualFSPath("vol", nullptr, nullptr);
+        AddVirtualFSVOLPath("external01", nullptr, nullptr);
+        AddVirtualFSVOLPath("content", nullptr, nullptr);
     }
 
     thread = BackgroundThread::getInstance();

@@ -155,13 +155,19 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
 }
 
 static int checkdir(char *path) {
-	DIR *dir = opendir(path);
-	if(dir)
-	{
-		closedir(dir);
-		return 0;
-	}
-	return -1;
+    if (path != NULL &&
+        (strcmp(path, "fs:/vol") == 0 ||
+         strcmp(path, "fs:/vol/") == 0 ||
+         strcmp(path, "fs:/") == 0)) {
+        return 0;
+    }
+
+    DIR *dir = opendir(path);
+    if (dir) {
+        closedir(dir);
+        return 0;
+    }
+    return -1;
 }
 
 typedef void * (*path_func)(char *path, ...);
@@ -264,65 +270,89 @@ int vrt_rename(char *cwd, char *from_path, char *to_path) {
 /*
 	When in vfs-root this creates a fake DIR_ITER.
  */
-DIR_P *vrt_opendir(char *cwd, char *path)
-{
-	char *real_path = to_real_path(cwd, path);
-	if (!real_path) return NULL;
+DIR_P *vrt_opendir(char *cwd, char *path) {
+    char *real_path = to_real_path(cwd, path);
+    if (!real_path) { return NULL; }
 
-	DIR_P *iter = malloc(sizeof(DIR_P));
-	if (!iter)
-	{
-		if (*real_path != 0)
-			free(real_path);
-		return NULL;
-	}
+    DIR_P *iter = malloc(sizeof(DIR_P));
+    if (!iter) {
+        if (*real_path != 0) {
+            free(real_path);
+        }
+        return NULL;
+    }
 
-	iter->virt_root = 0;
-	iter->path = real_path;
+    iter->virt_root = 0;
+    iter->virtual_fs = 0;
+    iter->virtual_fs_vol = 0;
+    iter->path = real_path;
 
-	if (*iter->path == 0) {
-		iter->dir = malloc(sizeof(DIR));
-		if(!iter->dir) {
-			// root path is not allocated
-			free(iter);
-			return NULL;
-		}
-		memset(iter->dir, 0, sizeof(DIR));
-		iter->virt_root = 1; // we are at the virtual root
-		return iter;
-	}
+    if (*iter->path == 0 || (strncmp(iter->path, "fs:", 3) == 0 && strlen(iter->path) <= 4) || (strncmp(iter->path, "fs:/vol", 3) == 0 && strlen(iter->path) <= 8)) {
+        iter->dir = malloc(sizeof(DIR));
+        if (!iter->dir) {
+            // root path is not allocated
+            free(iter);
+            return NULL;
+        }
+        memset(iter->dir, 0, sizeof(DIR));
 
-	iter->dir = with_virtual_path(cwd, opendir, path, 0, NULL);
-	if(!iter->dir)
-	{
-		free(iter->path);
-		free(iter);
-		return NULL;
-	}
+        if (strncmp(iter->path, "fs:/vol", 7) == 0) {
+            iter->virtual_fs_vol = 1; // we are at the virtual fs
+        } else if (strncmp(iter->path, "fs:", 3) == 0) {
+            iter->virtual_fs = 1; // we are at the virtual fs
+        } else {
+            iter->virt_root = 1; // we are at the virtual root
+        }
 
-	return iter;
+        return iter;
+    }
+
+
+    iter->dir = with_virtual_path(cwd, opendir, path, 0, NULL);
+    if (!iter->dir) {
+        free(iter->path);
+        free(iter);
+        return NULL;
+    }
+
+
+    return iter;
 }
 
 /*
 	Yields virtual aliases when pDir->virt_root
  */
 struct dirent *vrt_readdir(DIR_P *pDir) {
-	if(!pDir || !pDir->dir) return NULL;
+    if (!pDir || !pDir->dir) { return NULL; }
 
-	DIR *iter = pDir->dir;
-	if (pDir->virt_root) {
-		for (; (uint32_t)iter->position < MAX_VIRTUAL_PARTITIONS; iter->position++) {
-			VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + (int)iter->position;
-			if (partition->inserted) {
-				iter->fileData.d_type = DT_DIR;
-				strcpy(iter->fileData.d_name, partition->alias + 1);
-				iter->position++;
-				return &iter->fileData;
-			}
-		}
-		return NULL;
-	}
-	return readdir(iter);
+    DIR *iter = pDir->dir;
+    if (pDir->virt_root || pDir->virtual_fs || pDir->virtual_fs_vol) {
+        int max = MAX_VIRTUAL_PARTITIONS;
+        VIRTUAL_PARTITION * PARTITION_PTR = VIRTUAL_PARTITIONS;
+        if(pDir->virtual_fs){
+            max = MAX_VIRTUAL_FS;
+            PARTITION_PTR = VIRTUAL_FS;
+        } else if (pDir->virtual_fs_vol){
+            max = MAX_VIRTUAL_FS_VOL;
+            PARTITION_PTR = VIRTUAL_FS_VOL;
+        }
+        for (; (uint32_t) iter->position < max; iter->position++) {
+            VIRTUAL_PARTITION *partition = PARTITION_PTR + (int) iter->position;
+            if (partition->inserted) {
+                iter->fileData.d_type = DT_DIR;
+                if(pDir->virtual_fs || pDir->virtual_fs_vol){
+                    strcpy(iter->fileData.d_name, partition->name);
+                }else{
+                    strcpy(iter->fileData.d_name, partition->alias + 1);
+                }
+                iter->position++;
+                return &iter->fileData;
+            }
+        }
+        return NULL;
+    }
+
+    return readdir(iter);
 }
 
 int vrt_closedir(DIR_P *iter) {
