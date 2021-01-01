@@ -34,9 +34,9 @@ misrepresented as being the original software.
 
 #include "net.h"
 
-#define MAX_NET_BUFFER_SIZE (64*1024)
+#define MAX_NET_BUFFER_SIZE (128*1024)
 #define MIN_NET_BUFFER_SIZE 4096
-#define FREAD_BUFFER_SIZE (64*1024)
+#define FREAD_BUFFER_SIZE (128*1024)
 
 extern uint32_t hostIpAddress;
 
@@ -227,7 +227,7 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char * buf = (char *) malloc(FREAD_BUFFER_SIZE);
+    char * buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
     if(!buf)
         return -1;
 
@@ -252,7 +252,7 @@ end:
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-    char * buf = (char *) malloc(NET_BUFFER_SIZE);
+    char * buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
     if(!buf)
         return -1;
 
