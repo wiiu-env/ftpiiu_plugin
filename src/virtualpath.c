@@ -76,25 +76,26 @@ void VirtualMountDevice(const char * path)
 
 void AddVirtualPath(const char *name, const char *alias, const char *prefix)
 {
-	if(!VIRTUAL_PARTITIONS)
-		VIRTUAL_PARTITIONS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+    if (!VIRTUAL_PARTITIONS) {
+        VIRTUAL_PARTITIONS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+    }
 
-	VIRTUAL_PARTITION * tmp = realloc(VIRTUAL_PARTITIONS, sizeof(VIRTUAL_PARTITION)*(MAX_VIRTUAL_PARTITIONS+1));
-	if(!tmp)
-	{
-		free(VIRTUAL_PARTITIONS);
-		MAX_VIRTUAL_PARTITIONS = 0;
-		return;
-	}
+    VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_PARTITIONS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_PARTITIONS + 1));
+    if (!tmp) {
+        free(VIRTUAL_PARTITIONS);
+        VIRTUAL_PARTITIONS = NULL;
+        MAX_VIRTUAL_PARTITIONS = 0;
+        return;
+    }
 
-	VIRTUAL_PARTITIONS = tmp;
+    VIRTUAL_PARTITIONS = tmp;
 
-	VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].name = strdup(name);
-	VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].alias = strdup(alias);
-	VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].prefix = strdup(prefix);
-	VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].inserted = true;
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].name = strdup(name);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].alias = strdup(alias);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].prefix = strdup(prefix);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].inserted = true;
 
-	MAX_VIRTUAL_PARTITIONS++;
+    MAX_VIRTUAL_PARTITIONS++;
 }
 
 
@@ -105,7 +106,10 @@ void AddVirtualPath(const char *name, const char *alias, const char *prefix)
 
      VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS + 1));
      if (!tmp) {
-         free(VIRTUAL_FS);
+         if (VIRTUAL_FS) {
+             free(VIRTUAL_FS);
+             VIRTUAL_FS = 0;
+         }
          MAX_VIRTUAL_FS = 0;
          return;
      }
@@ -150,21 +154,45 @@ void MountVirtualDevices()
     VirtualMountDevice("usb:/");
 }
 
-void UnmountVirtualPaths()
-{
-	uint32_t i = 0;
-	for(i = 0; i < MAX_VIRTUAL_PARTITIONS; i++)
-	{
-		if(VIRTUAL_PARTITIONS[i].name)
-			free(VIRTUAL_PARTITIONS[i].name);
-		if(VIRTUAL_PARTITIONS[i].alias)
-			free(VIRTUAL_PARTITIONS[i].alias);
-		if(VIRTUAL_PARTITIONS[i].prefix)
-			free(VIRTUAL_PARTITIONS[i].prefix);
-	}
+ void UnmountVirtualPaths() {
+     uint32_t i = 0;
+     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
+         if (VIRTUAL_PARTITIONS[i].name) {
+             free(VIRTUAL_PARTITIONS[i].name);
+         }
+         if (VIRTUAL_PARTITIONS[i].alias) {
+             free(VIRTUAL_PARTITIONS[i].alias);
+         }
+         if (VIRTUAL_PARTITIONS[i].prefix) {
+             free(VIRTUAL_PARTITIONS[i].prefix);
+         }
+     }
 
-	if(VIRTUAL_PARTITIONS)
-		free(VIRTUAL_PARTITIONS);
-	VIRTUAL_PARTITIONS = NULL;
-	MAX_VIRTUAL_PARTITIONS = 0;
-}
+     for (i = 0; i < MAX_VIRTUAL_FS_VOL; i++) {
+         if (VIRTUAL_FS_VOL[i].name) {
+             free(VIRTUAL_FS_VOL[i].name);
+         }
+     }
+
+     for (i = 0; i < MAX_VIRTUAL_FS; i++) {
+         if (VIRTUAL_FS[i].name) {
+             free(VIRTUAL_FS[i].name);
+         }
+     }
+
+     if (VIRTUAL_PARTITIONS) {
+         free(VIRTUAL_PARTITIONS);
+     }
+     if (VIRTUAL_FS_VOL) {
+         free(VIRTUAL_FS_VOL);
+     }
+     if (VIRTUAL_FS) {
+         free(VIRTUAL_FS);
+     }
+     VIRTUAL_PARTITIONS = NULL;
+     VIRTUAL_FS_VOL = NULL;
+     VIRTUAL_FS = NULL;
+     MAX_VIRTUAL_PARTITIONS = 0;
+     MAX_VIRTUAL_FS = 0;
+     MAX_VIRTUAL_FS_VOL = 0;
+ }
