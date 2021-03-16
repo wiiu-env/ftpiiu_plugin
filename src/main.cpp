@@ -40,7 +40,7 @@ WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
-WUPS_USE_WUT_CRT()
+WUPS_USE_WUT_DEVOPTAB()
 
 uint32_t hostIpAddress = 0;
 int iosuhaxMount = 0;
@@ -49,7 +49,7 @@ int fsaFd = -1;
 BackgroundThread * thread = NULL;
 
 /* Entry point */
-ON_APPLICATION_START(args) {
+ON_APPLICATION_START() {
     WHBInitializeSocketLibrary();
 
     nn::ac::ConfigIdNum configId;
@@ -118,7 +118,7 @@ void stopThread(){
     BackgroundThread::destroyInstance();
 }
 
-ON_APPLICATION_END(){
+ON_APPLICATION_REQUESTS_EXIT(){
     DEBUG_FUNCTION_LINE("Ending ftp server");
     stopThread();
 
