@@ -152,6 +152,10 @@ void MountVirtualDevices()
     VirtualMountDevice("storage_mlc:/");
     VirtualMountDevice("storage_usb:/");
     VirtualMountDevice("usb:/");
+
+    AddVirtualFSPath("vol", NULL, NULL);
+    AddVirtualFSVOLPath("external01", NULL, NULL);
+    AddVirtualFSVOLPath("content", NULL, NULL);
 }
 
  void UnmountVirtualPaths() {
