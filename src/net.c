@@ -27,7 +27,6 @@ misrepresented as being the original software.
 #include <malloc.h>
 #include <unistd.h>
 #include <sys/fcntl.h>
-#include <nsysnet/socket.h>
 #include "main.h"
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
@@ -48,7 +47,7 @@ void initialise_network() {
     int32_t result = -1;
     while (!check_reset_synchronous() && result < 0) {
         net_deinit();
-        while (!check_reset_synchronous() && (result = net_init()) == -WIIU_EAGAIN);
+        while (!check_reset_synchronous() && (result = net_init()) == -EAGAIN);
         if (result < 0)
             printf("net_init() failed: [%i] %s, retrying...\n", result, strerror(-result));
     }
@@ -148,7 +147,7 @@ int32_t network_close(int32_t s) {
     if(s < 0)
         return -1;
 
-    return socketclose(s);
+    return close(s);
 }
 
 int32_t set_blocking(int32_t s, bool blocking) {
@@ -245,7 +244,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
         goto end;
     }
     free(buf);
-    return -WIIU_EAGAIN;
+    return -EAGAIN;
 end:
     free(buf);
     return result;

@@ -1,34 +1,14 @@
-
 #include <wups.h>
-#include <string.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <malloc.h>
-#include <stdint.h>
+#include <cstring>
 #include <iosuhax.h>
 #include <iosuhax_devoptab.h>
 #include <iosuhax_disc_interface.h>
-#include <proc_ui/procui.h>
-#include <coreinit/foreground.h>
-
-#include <coreinit/screen.h>
-#include <sysapp/launch.h>
 #include <coreinit/dynload.h>
 #include <nn/ac.h>
-#include <stdarg.h>
-#include <whb/proc.h>
-#include <stdlib.h>
-#include <coreinit/thread.h>
 #include <coreinit/cache.h>
-#include <coreinit/time.h>
-#include <stdio.h>
-#include <whb/libmanager.h>
 #include "utils/logger.h"
-#include "utils/utils.h"
 #include <whb/log_udp.h>
-
 #include "virtualpath.h"
-#include "net.h"
 #include "BackgroundThread.hpp"
 
 #define MAX_CONSOLE_LINES_TV    27
@@ -46,21 +26,11 @@ uint32_t hostIpAddress = 0;
 int iosuhaxMount = 0;
 int fsaFd = -1;
 
-BackgroundThread * thread = NULL;
+BackgroundThread * thread = nullptr;
 
 /* Entry point */
 ON_APPLICATION_START() {
-    WHBInitializeSocketLibrary();
-
-    nn::ac::ConfigIdNum configId;
-
-    nn::ac::Initialize();
-    nn::ac::GetStartupId(&configId);
-    nn::ac::Connect(configId);
-
     ACGetAssignedAddress(&hostIpAddress);
-
-    nn::ac::Finalize();
 
     WHBLogUdpInit();
 

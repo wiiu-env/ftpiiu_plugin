@@ -23,19 +23,19 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include <errno.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
 #include <coreinit/thread.h>
 #include <unistd.h>
-#include <nsysnet/socket.h>
+#include <errno.h>
 #include "main.h"
 #include "utils/logger.h"
 
 //! TODO: fix those function
 #define gettime()               OSGetTick()
-#define errno                   wiiu_geterrno()
 
 #include "ftp.h"
 #include "virtualpath.h"
@@ -746,7 +746,7 @@ static bool process_accept_events(int32_t server) {
     int32_t peer;
     struct sockaddr_in client_address;
     int32_t addrlen = sizeof(client_address);
-    while ((peer = network_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -WIIU_EAGAIN) {
+    while ((peer = network_accept(server, (struct sockaddr *)&client_address, &addrlen)) != -EAGAIN) {
         if (peer < 0) {
             console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
             return false;
@@ -813,8 +813,8 @@ static void process_data_events(client_t *client) {
         } else {
             if ((result = network_connect(client->data_socket, (struct sockaddr *)&client->address, sizeof(client->address))) < 0) {
                 if (result == -EINPROGRESS || result == -EALREADY)
-                    result = -WIIU_EAGAIN;
-                if ((result != -WIIU_EAGAIN) && (result != -EISCONN)) {
+                    result = -EAGAIN;
+                if ((result != -EAGAIN) && (result != -EISCONN)) {
                     console_printf("Unable to connect to client: [%i] %s\n", -result, strerror(-result));
                 }
             }
@@ -833,7 +833,7 @@ static void process_data_events(client_t *client) {
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
     }
 
-    if (result <= 0 && result != -WIIU_EAGAIN) {
+    if (result <= 0 && result != -EAGAIN) {
         cleanup_data_resources(client);
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");

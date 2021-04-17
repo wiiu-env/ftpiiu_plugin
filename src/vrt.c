@@ -22,7 +22,7 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#include <errno.h>
+
 #include <malloc.h>
 #include <stdarg.h>
 #include <string.h>
