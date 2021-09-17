@@ -8,6 +8,7 @@
 #include <coreinit/cache.h>
 #include "utils/logger.h"
 #include <whb/log_udp.h>
+#include <whb/libmanager.h>
 #include "virtualpath.h"
 #include "BackgroundThread.hpp"
 
@@ -29,10 +30,12 @@ int fsaFd = -1;
 BackgroundThread * thread = nullptr;
 
 /* Entry point */
-ON_APPLICATION_START() {
-    ACGetAssignedAddress(&hostIpAddress);
-
-    WHBLogUdpInit();
+ON_APPLICATION_START() {    
+    nn::ac::Initialize();
+    nn::ac::ConnectAsync();    
+    nn::ac::GetAssignedAddress(&hostIpAddress);
+    
+    WHBLogUdpInit();    
 
     //!*******************************************************************
     //!                        Initialize FS                             *
