@@ -21,7 +21,7 @@ WUPS_PLUGIN_VERSION("0.1");
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
-WUPS_USE_WUT_DEVOPTAB()
+WUPS_USE_WUT_DEVOPTAB();
 
 uint32_t hostIpAddress = 0;
 int iosuhaxMount = 0;
