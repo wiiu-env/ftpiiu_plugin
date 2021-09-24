@@ -32,25 +32,32 @@ extern "C"{
 #include <stdio.h>
 #include <sys/dirent.h>
 
-typedef struct
-{
-	DIR *dir;
-	char *path;
-	uint8_t virt_root;
-	uint8_t virtual_fs;
-	uint8_t virtual_fs_vol;
+typedef struct {
+    DIR *dir;
+    char *path;
+    uint8_t virt_root;
+    uint8_t virtual_fs;
+    uint8_t virtual_fs_vol;
 } DIR_P;
 
 char *to_real_path(char *virtual_cwd, char *virtual_path);
 
 FILE *vrt_fopen(char *cwd, char *path, char *mode);
+
 int vrt_stat(char *cwd, char *path, struct stat *st);
+
 int vrt_chdir(char *cwd, char *path);
+
 int vrt_unlink(char *cwd, char *path);
+
 int vrt_mkdir(char *cwd, char *path, mode_t mode);
+
 int vrt_rename(char *cwd, char *from_path, char *to_path);
+
 DIR_P *vrt_opendir(char *cwd, char *path);
+
 struct dirent *vrt_readdir(DIR_P *iter);
+
 int vrt_closedir(DIR_P *iter);
 
 #ifdef __cplusplus

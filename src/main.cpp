@@ -8,7 +8,6 @@
 #include <coreinit/cache.h>
 #include "utils/logger.h"
 #include <whb/log_udp.h>
-#include <whb/libmanager.h>
 #include "virtualpath.h"
 #include "BackgroundThread.hpp"
 
@@ -27,15 +26,15 @@ uint32_t hostIpAddress = 0;
 int iosuhaxMount = 0;
 int fsaFd = -1;
 
-BackgroundThread * thread = nullptr;
+BackgroundThread *thread = nullptr;
 
 /* Entry point */
-ON_APPLICATION_START() {    
+ON_APPLICATION_START() {
     nn::ac::Initialize();
-    nn::ac::ConnectAsync();    
+    nn::ac::ConnectAsync();
     nn::ac::GetAssignedAddress(&hostIpAddress);
-    
-    WHBLogUdpInit();    
+
+    WHBLogUdpInit();
 
     //!*******************************************************************
     //!                        Initialize FS                             *
@@ -43,7 +42,7 @@ ON_APPLICATION_START() {
 
     DEBUG_FUNCTION_LINE("IOSUHAX_Open");
     int res = IOSUHAX_Open(nullptr);
-    if(res < 0) {
+    if (res < 0) {
         DEBUG_FUNCTION_LINE("IOSUHAX_open failed");
         VirtualMountDevice("fs:/");
     } else {
@@ -52,7 +51,7 @@ ON_APPLICATION_START() {
 
         DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open");
         fsaFd = IOSUHAX_FSA_Open();
-        if(fsaFd < 0) {
+        if (fsaFd < 0) {
             DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open failed");
         }
 
@@ -63,9 +62,9 @@ ON_APPLICATION_START() {
         mount_fs("storage_odd_updates", fsaFd, "/dev/odd02", "/vol/storage_odd_updates");
         mount_fs("storage_odd_content", fsaFd, "/dev/odd03", "/vol/storage_odd_content");
         mount_fs("storage_odd_content2", fsaFd, "/dev/odd04", "/vol/storage_odd_content2");
-        mount_fs("storage_slc", fsaFd, NULL, "/vol/system");
-        mount_fs("storage_mlc", fsaFd, NULL, "/vol/storage_mlc01");
-        mount_fs("storage_usb", fsaFd, NULL, "/vol/storage_usb01");
+        mount_fs("storage_slc", fsaFd, nullptr, "/vol/system");
+        mount_fs("storage_mlc", fsaFd, nullptr, "/vol/storage_mlc01");
+        mount_fs("storage_usb", fsaFd, nullptr, "/vol/storage_usb01");
 
         VirtualMountDevice("fs:/");
         VirtualMountDevice("slccmpt01:/");
@@ -87,15 +86,15 @@ ON_APPLICATION_START() {
     DCFlushRange(&thread, 4);
 }
 
-void stopThread(){
+void stopThread() {
     BackgroundThread::destroyInstance();
 }
 
-ON_APPLICATION_REQUESTS_EXIT(){
+ON_APPLICATION_REQUESTS_EXIT() {
     DEBUG_FUNCTION_LINE("Ending ftp server");
     stopThread();
 
-    if(iosuhaxMount) {
+    if (iosuhaxMount) {
         IOSUHAX_sdio_disc_interface.shutdown();
         IOSUHAX_usb_disc_interface.shutdown();
 

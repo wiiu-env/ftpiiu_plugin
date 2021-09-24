@@ -1,50 +1,50 @@
 #pragma once
+
 #include "utils/BackgroundThreadWrapper.hpp"
 #include <coreinit/cache.h>
 #include "utils/logger.h"
 
 #define PORT                    21
 
-class BackgroundThread: BackgroundThreadWrapper {
+class BackgroundThread : BackgroundThreadWrapper {
 public:
     static BackgroundThread *getInstance() {
-                    DCFlushRange(&instance, sizeof(instance));
-            ICInvalidateRange(&instance, sizeof(instance));
-        if(instance == NULL) {
+        DCFlushRange(&instance, sizeof(BackgroundThread));
+        ICInvalidateRange(&instance, sizeof(BackgroundThread));
+        if (instance == nullptr) {
             instance = new BackgroundThread();
-            DCFlushRange(&instance, sizeof(instance));
-            ICInvalidateRange(&instance, sizeof(instance));
+            DCFlushRange(&instance, sizeof(BackgroundThread));
+            ICInvalidateRange(&instance, sizeof(BackgroundThread));
         }
         return instance;
     }
 
     static void destroyInstance() {
-        DCFlushRange(&instance, sizeof(instance));
-        ICInvalidateRange(&instance, sizeof(instance));
+        DCFlushRange(&instance, sizeof(BackgroundThread));
+        ICInvalidateRange(&instance, sizeof(BackgroundThread));
         DEBUG_FUNCTION_LINE("Instance is %08X\n", instance);
         OSSleepTicks(OSSecondsToTicks(1));
-        if(instance != NULL) {
+        if (instance != nullptr) {
             delete instance;
-            instance = NULL;
-            DCFlushRange(&instance, sizeof(instance));
-            ICInvalidateRange(&instance, sizeof(instance));
+            instance = nullptr;
+            DCFlushRange(&instance, sizeof(BackgroundThread));
+            ICInvalidateRange(&instance, sizeof(BackgroundThread));
         }
     }
 
     BackgroundThread();
 
-    virtual ~BackgroundThread();
+    ~BackgroundThread() override;
 
 private:
     static int32_t getPriority() {
         return 16;
     }
 
-    virtual BOOL whileLoop();
+    BOOL whileLoop() override;
 
-    static BackgroundThread * instance;
+    static BackgroundThread *instance;
 
     int serverSocket = -1;
     int network_down = 0;
-
 };

@@ -67,54 +67,54 @@ void initialise_network() {
 }
 #endif
 
-int32_t network_socket(uint32_t domain,uint32_t type,uint32_t protocol) {
+int32_t network_socket(uint32_t domain, uint32_t type, uint32_t protocol) {
     int sock = socket(domain, type, protocol);
-    if(sock < 0) {
+    if (sock < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : sock;
     }
     return sock;
 }
 
-int32_t network_bind(int32_t s,struct sockaddr *name,int32_t namelen) {
+int32_t network_bind(int32_t s, struct sockaddr *name, int32_t namelen) {
     int res = bind(s, name, namelen);
-    if(res < 0) {
+    if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
     }
     return res;
 }
 
-int32_t network_listen(int32_t s,uint32_t backlog) {
+int32_t network_listen(int32_t s, uint32_t backlog) {
     int res = listen(s, backlog);
-    if(res < 0) {
+    if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
     }
     return res;
 }
 
-int32_t network_accept(int32_t s,struct sockaddr *addr,int32_t *addrlen) {
+int32_t network_accept(int32_t s, struct sockaddr *addr, int32_t *addrlen) {
     int res = accept(s, addr, addrlen);
-    if(res < 0) {
+    if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
     }
     return res;
 }
 
-int32_t network_connect(int32_t s,struct sockaddr *addr, int32_t addrlen) {
+int32_t network_connect(int32_t s, struct sockaddr *addr, int32_t addrlen) {
     int res = connect(s, addr, addrlen);
-    if(res < 0) {
+    if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
     }
     return res;
 }
 
-int32_t network_read(int32_t s,void *mem,int32_t len) {
+int32_t network_read(int32_t s, void *mem, int32_t len) {
     int res = recv(s, mem, len, 0);
-    if(res < 0) {
+    if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
     }
@@ -125,12 +125,12 @@ uint32_t network_gethostip() {
     return hostIpAddress;
 }
 
-int32_t network_write(int32_t s, const void *mem,int32_t len) {
+int32_t network_write(int32_t s, const void *mem, int32_t len) {
     int32_t transfered = 0;
 
-    while(len) {
+    while (len) {
         int ret = send(s, mem, len, 0);
-        if(ret < 0) {
+        if (ret < 0) {
             int err = -wiiu_geterrno();
             transfered = (err < 0) ? err : ret;
             break;
@@ -144,7 +144,7 @@ int32_t network_write(int32_t s, const void *mem,int32_t len) {
 }
 
 int32_t network_close(int32_t s) {
-    if(s < 0)
+    if (s < 0)
         return -1;
 
     return close(s);
@@ -178,7 +178,7 @@ int32_t create_server(uint16_t port) {
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int32_t ret;
-    if ((ret = network_bind(server, (struct sockaddr *)&bindAddress, sizeof(bindAddress))) < 0) {
+    if ((ret = network_bind(server, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
         network_close(server);
         //gxprintf("Error binding socket: [%i] %s\n", -ret, strerror(-ret));
         return ret;
@@ -193,13 +193,14 @@ int32_t create_server(uint16_t port) {
 }
 
 typedef int32_t (*transferrer_type)(int32_t s, void *mem, int32_t len);
+
 static int32_t transfer_exact(int32_t s, char *buf, int32_t length, transferrer_type transferrer) {
     int32_t result = 0;
     int32_t remaining = length;
     int32_t bytes_transferred;
     set_blocking(s, true);
     while (remaining) {
-try_again_with_smaller_buffer:
+        try_again_with_smaller_buffer:
         bytes_transferred = transferrer(s, buf, MIN(remaining, (int) NET_BUFFER_SIZE));
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
@@ -222,12 +223,12 @@ try_again_with_smaller_buffer:
 }
 
 int32_t send_exact(int32_t s, char *buf, int32_t length) {
-    return transfer_exact(s, buf, length, (transferrer_type)network_write);
+    return transfer_exact(s, buf, length, (transferrer_type) network_write);
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char * buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
-    if(!buf)
+    char *buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
+    if (!buf)
         return -1;
 
     int32_t bytes_read;
@@ -245,19 +246,19 @@ int32_t send_from_file(int32_t s, FILE *f) {
     }
     free(buf);
     return -EAGAIN;
-end:
+    end:
     free(buf);
     return result;
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-    char * buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
-    if(!buf)
+    char *buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
+    if (!buf)
         return -1;
 
     int32_t bytes_read;
     while (1) {
-try_again_with_smaller_buffer:
+        try_again_with_smaller_buffer:
         bytes_read = network_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {

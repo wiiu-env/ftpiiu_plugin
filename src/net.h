@@ -43,13 +43,20 @@ extern "C"{
 void initialise_network();
 #endif
 
-int32_t network_socket(uint32_t domain,uint32_t type,uint32_t protocol);
-int32_t network_bind(int32_t s,struct sockaddr *name,int32_t namelen);
-int32_t network_listen(int32_t s,uint32_t backlog);
-int32_t network_accept(int32_t s,struct sockaddr *addr,int32_t *addrlen);
-int32_t network_connect(int32_t s,struct sockaddr *,int32_t);
-int32_t network_read(int32_t s,void *mem,int32_t len);
+int32_t network_socket(uint32_t domain, uint32_t type, uint32_t protocol);
+
+int32_t network_bind(int32_t s, struct sockaddr *name, int32_t namelen);
+
+int32_t network_listen(int32_t s, uint32_t backlog);
+
+int32_t network_accept(int32_t s, struct sockaddr *addr, int32_t *addrlen);
+
+int32_t network_connect(int32_t s, struct sockaddr *, int32_t);
+
+int32_t network_read(int32_t s, void *mem, int32_t len);
+
 int32_t network_close(int32_t s);
+
 uint32_t network_gethostip();
 
 int32_t set_blocking(int32_t s, bool blocking);
