@@ -22,7 +22,6 @@ public:
     static void destroyInstance() {
         DCFlushRange(&instance, sizeof(BackgroundThread));
         ICInvalidateRange(&instance, sizeof(BackgroundThread));
-        DEBUG_FUNCTION_LINE("Instance is %08X\n", instance);
         OSSleepTicks(OSSecondsToTicks(1));
         if (instance != nullptr) {
             delete instance;

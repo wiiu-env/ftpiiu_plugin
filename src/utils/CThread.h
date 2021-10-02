@@ -44,7 +44,6 @@ public:
     //! destructor
     virtual ~CThread() {
         shutdownThread();
-        DEBUG_FUNCTION_LINE("END\n");
     }
 
     static CThread *create(CThread::Callback callback, void *callbackArg, int32_t iAttr = eAttributeNone, int32_t iPriority = 16, int32_t iStackSize = 0x8000) {
