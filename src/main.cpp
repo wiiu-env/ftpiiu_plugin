@@ -33,8 +33,7 @@ ON_APPLICATION_START() {
     nn::ac::Initialize();
     nn::ac::ConnectAsync();
     nn::ac::GetAssignedAddress(&hostIpAddress);
-
-    WHBLogUdpInit();
+    initLogging();
 
     //!*******************************************************************
     //!                        Initialize FS                             *
@@ -111,5 +110,6 @@ ON_APPLICATION_REQUESTS_EXIT() {
     }
 
     UnmountVirtualPaths();
+    deinitLogging();
 }
 
