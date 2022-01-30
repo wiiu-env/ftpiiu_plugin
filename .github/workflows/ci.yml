@@ -30,9 +30,8 @@ jobs:
     - uses: actions/download-artifact@master
       with:
         name: binary
-        path: wiiu/plugins
     - name: zip artifact
-      run: zip -r ${{ env.REPOSITORY_NAME }}_${{ env.DATETIME }}.zip wiiu
+      run: zip -r ${{ env.REPOSITORY_NAME }}_${{ env.DATETIME }}.zip *.wps
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
