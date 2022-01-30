@@ -11,9 +11,6 @@
 #include "virtualpath.h"
 #include "BackgroundThread.hpp"
 
-#define MAX_CONSOLE_LINES_TV    27
-#define MAX_CONSOLE_LINES_DRC   18
-
 WUPS_PLUGIN_NAME("FTPiiU");
 WUPS_PLUGIN_DESCRIPTION("FTP Server");
 WUPS_PLUGIN_VERSION("0.1");
@@ -39,11 +36,15 @@ ON_APPLICATION_START() {
     //!                        Initialize FS                             *
     //!*******************************************************************
 
+    VirtualMountDevice("fs:/");
+    AddVirtualFSPath("vol", nullptr, nullptr);
+    AddVirtualFSVOLPath("external01", nullptr, nullptr);
+    AddVirtualFSVOLPath("content", nullptr, nullptr);
+
     DEBUG_FUNCTION_LINE("IOSUHAX_Open");
     int res = IOSUHAX_Open(nullptr);
     if (res < 0) {
         DEBUG_FUNCTION_LINE("IOSUHAX_open failed");
-        VirtualMountDevice("fs:/");
     } else {
         iosuhaxMount = 1;
         //fatInitDefault();
@@ -65,7 +66,6 @@ ON_APPLICATION_START() {
         mount_fs("storage_mlc", fsaFd, nullptr, "/vol/storage_mlc01");
         mount_fs("storage_usb", fsaFd, nullptr, "/vol/storage_usb01");
 
-        VirtualMountDevice("fs:/");
         VirtualMountDevice("slccmpt01:/");
         VirtualMountDevice("storage_odd_tickets:/");
         VirtualMountDevice("storage_odd_updates:/");
@@ -75,10 +75,6 @@ ON_APPLICATION_START() {
         VirtualMountDevice("storage_mlc:/");
         VirtualMountDevice("storage_usb:/");
         VirtualMountDevice("usb:/");
-
-        AddVirtualFSPath("vol", nullptr, nullptr);
-        AddVirtualFSVOLPath("external01", nullptr, nullptr);
-        AddVirtualFSVOLPath("content", nullptr, nullptr);
     }
 
     thread = BackgroundThread::getInstance();
@@ -92,6 +88,8 @@ void stopThread() {
 ON_APPLICATION_REQUESTS_EXIT() {
     DEBUG_FUNCTION_LINE("Ending ftp server");
     stopThread();
+
+    DEBUG_FUNCTION_LINE("Ended ftp Server.");
 
     if (iosuhaxMount) {
         IOSUHAX_sdio_disc_interface.shutdown();
@@ -109,7 +107,9 @@ ON_APPLICATION_REQUESTS_EXIT() {
         IOSUHAX_Close();
     }
 
+    DEBUG_FUNCTION_LINE("Unmount virtual paths");
     UnmountVirtualPaths();
+
     deinitLogging();
 }
 

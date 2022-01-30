@@ -9,25 +9,18 @@
 class BackgroundThread : BackgroundThreadWrapper {
 public:
     static BackgroundThread *getInstance() {
-        DCFlushRange(&instance, sizeof(BackgroundThread));
-        ICInvalidateRange(&instance, sizeof(BackgroundThread));
         if (instance == nullptr) {
             instance = new BackgroundThread();
-            DCFlushRange(&instance, sizeof(BackgroundThread));
-            ICInvalidateRange(&instance, sizeof(BackgroundThread));
+            DCFlushRange(&instance, 4);
         }
         return instance;
     }
 
     static void destroyInstance() {
-        DCFlushRange(&instance, sizeof(BackgroundThread));
-        ICInvalidateRange(&instance, sizeof(BackgroundThread));
-        OSSleepTicks(OSSecondsToTicks(1));
         if (instance != nullptr) {
             delete instance;
             instance = nullptr;
-            DCFlushRange(&instance, sizeof(BackgroundThread));
-            ICInvalidateRange(&instance, sizeof(BackgroundThread));
+            DCFlushRange(&instance, 4);
         }
     }
 

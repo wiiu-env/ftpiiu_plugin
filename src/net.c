@@ -67,7 +67,7 @@ void initialise_network() {
 }
 #endif
 
-int32_t network_socket(uint32_t domain, uint32_t type, uint32_t protocol) {
+int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     int sock = socket(domain, type, protocol);
     if (sock < 0) {
         int err = -wiiu_geterrno();
@@ -94,7 +94,7 @@ int32_t network_listen(int32_t s, uint32_t backlog) {
     return res;
 }
 
-int32_t network_accept(int32_t s, struct sockaddr *addr, int32_t *addrlen) {
+int32_t network_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen) {
     int res = accept(s, addr, addrlen);
     if (res < 0) {
         int err = -wiiu_geterrno();
@@ -144,10 +144,17 @@ int32_t network_write(int32_t s, const void *mem, int32_t len) {
 }
 
 int32_t network_close(int32_t s) {
-    if (s < 0)
+    if (s < 0) {
         return -1;
+    }
 
-    return close(s);
+    int res = close(s);
+
+    if (res < 0) {
+        int err = -wiiu_geterrno();
+        return (err < 0) ? err : res;
+    }
+    return res;
 }
 
 int32_t set_blocking(int32_t s, bool blocking) {
@@ -163,9 +170,9 @@ int32_t network_close_blocking(int32_t s) {
 
 int32_t create_server(uint16_t port) {
     int32_t server = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (server < 0)
+    if (server < 0) {
         return -1;
-
+    }
 
     set_blocking(server, false);
     uint32_t enable = 1;

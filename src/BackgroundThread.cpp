@@ -11,35 +11,34 @@ BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread:
     this->serverSocket = create_server(PORT);
     DCFlushRange(&(this->serverSocket), 4);
     mutex.unlock();
+    DEBUG_FUNCTION_LINE("Resume Thread");
     CThread::resumeThread();
 }
 
 BackgroundThread::~BackgroundThread() {
     DEBUG_FUNCTION_LINE("Shutting down FTP Server");
-    if (this->serverSocket != -1) {
-        mutex.lock();
+    mutex.lock();
+    if (this->serverSocket >= 0) {
         cleanup_ftp();
         network_close(this->serverSocket);
-        mutex.unlock();
         this->serverSocket = -1;
     }
+    mutex.unlock();
 }
 
 BOOL BackgroundThread::whileLoop() {
-    if (this->serverSocket != -1) {
-        mutex.lock();
+    mutex.lock();
+    if (this->serverSocket >= 0) {
         network_down = process_ftp_events(this->serverSocket);
-        mutex.unlock();
         if (network_down) {
             DEBUG_FUNCTION_LINE("Network is down %d", this->serverSocket);
-            mutex.lock();
             cleanup_ftp();
             network_close(this->serverSocket);
             this->serverSocket = -1;
             DCFlushRange(&(this->serverSocket), 4);
-            mutex.unlock();
         }
     }
+    mutex.unlock();
     OSSleepTicks(OSMillisecondsToTicks(16));
     return true;
 }

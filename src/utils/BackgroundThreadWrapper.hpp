@@ -23,12 +23,7 @@ protected:
 private:
     void executeThread() override;
 
-    /**
-        Called when a connection has be accepted.
-    **/
     virtual BOOL whileLoop() = 0;
 
     volatile int32_t exitThread = 0;
-
-
 };

@@ -56,8 +56,7 @@ static uint8_t num_clients = 0;
 static uint16_t passive_port = 1024;
 static char *password = NULL;
 
-void console_printf(const char *format, ...) {
-}
+#define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ## ARGS);
 
 typedef int32_t (*data_connection_callback)(int32_t data_socket, void *arg);
 
@@ -330,7 +329,7 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     char reply[49];
     uint16_t port = bindAddress.sin_port;
     uint32_t ip = network_gethostip();
-    struct in_addr addr;
+    struct in_addr addr = {};
     addr.s_addr = ip;
     console_printf("Listening for data connections at %s:%u...\n", inet_ntoa(addr), port);
     sprintf(reply, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
@@ -748,7 +747,7 @@ void cleanup_ftp() {
 static bool process_accept_events(int32_t server) {
     int32_t peer;
     struct sockaddr_in client_address;
-    int32_t addrlen = sizeof(client_address);
+    socklen_t addrlen = sizeof(client_address);
     while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
         if (peer < 0) {
             console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
@@ -807,7 +806,7 @@ static void process_data_events(client_t *client) {
     if (!client->data_connection_connected) {
         if (client->passive_socket >= 0) {
             struct sockaddr_in data_peer_address;
-            int32_t addrlen = sizeof(data_peer_address);
+            socklen_t addrlen = sizeof(data_peer_address);
             result = network_accept(client->passive_socket, (struct sockaddr *) &data_peer_address, &addrlen);
             if (result >= 0) {
                 client->data_socket = result;
