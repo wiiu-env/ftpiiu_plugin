@@ -6,12 +6,12 @@
 extern "C" {
 #endif
 
-#include <stdint.h>
 #include "net.h"
+#include <stdint.h>
 
-#define MAXPATHLEN 256
+#define MAXPATHLEN      256
 
-#define wiiu_geterrno()  (errno)
+#define wiiu_geterrno() (errno)
 
 //! C wrapper for our C++ functions
 int Menu_Main(void);

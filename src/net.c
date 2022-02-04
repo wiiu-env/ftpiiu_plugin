@@ -21,21 +21,21 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include "main.h"
+#include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <malloc.h>
-#include <unistd.h>
 #include <sys/fcntl.h>
-#include "main.h"
+#include <unistd.h>
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 #include "net.h"
 
-#define MAX_NET_BUFFER_SIZE (128*1024)
+#define MAX_NET_BUFFER_SIZE (128 * 1024)
 #define MIN_NET_BUFFER_SIZE 4096
-#define FREAD_BUFFER_SIZE (128*1024)
+#define FREAD_BUFFER_SIZE   (128 * 1024)
 
 extern uint32_t hostIpAddress;
 
@@ -131,7 +131,7 @@ int32_t network_write(int32_t s, const void *mem, int32_t len) {
     while (len) {
         int ret = send(s, mem, len, 0);
         if (ret < 0) {
-            int err = -wiiu_geterrno();
+            int err    = -wiiu_geterrno();
             transfered = (err < 0) ? err : ret;
             break;
         }
@@ -180,8 +180,8 @@ int32_t create_server(uint16_t port) {
 
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
-    bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(port);
+    bindAddress.sin_family      = AF_INET;
+    bindAddress.sin_port        = htons(port);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
     int32_t ret;
@@ -202,12 +202,12 @@ int32_t create_server(uint16_t port) {
 typedef int32_t (*transferrer_type)(int32_t s, void *mem, int32_t len);
 
 static int32_t transfer_exact(int32_t s, char *buf, int32_t length, transferrer_type transferrer) {
-    int32_t result = 0;
+    int32_t result    = 0;
     int32_t remaining = length;
     int32_t bytes_transferred;
     set_blocking(s, true);
     while (remaining) {
-        try_again_with_smaller_buffer:
+    try_again_with_smaller_buffer:
         bytes_transferred = transferrer(s, buf, MIN(remaining, (int) NET_BUFFER_SIZE));
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
@@ -253,7 +253,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
     }
     free(buf);
     return -EAGAIN;
-    end:
+end:
     free(buf);
     return result;
 }
@@ -265,7 +265,7 @@ int32_t recv_to_file(int32_t s, FILE *f) {
 
     int32_t bytes_read;
     while (1) {
-        try_again_with_smaller_buffer:
+    try_again_with_smaller_buffer:
         bytes_read = network_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
             if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {

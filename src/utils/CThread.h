@@ -17,11 +17,11 @@
 #ifndef CTHREAD_H_
 #define CTHREAD_H_
 
-#include <malloc.h>
-#include <unistd.h>
+#include "utils/logger.h"
 #include <coreinit/systeminfo.h>
 #include <coreinit/thread.h>
-#include "utils/logger.h"
+#include <malloc.h>
+#include <unistd.h>
 
 class CThread {
 public:
@@ -29,7 +29,7 @@ public:
 
     //! constructor
     explicit CThread(int32_t iAttr, int32_t iPriority = 16, int32_t iStackSize = 0x8000, CThread::Callback callback = nullptr, void *callbackArg = nullptr)
-            : pThread(nullptr), pThreadStack(nullptr), pCallback(callback), pCallbackArg(callbackArg) {
+        : pThread(nullptr), pThreadStack(nullptr), pCallback(callback), pCallbackArg(callbackArg) {
         //! save attribute assignment
         iAttributes = iAttr;
         //! allocate the thread
@@ -112,19 +112,20 @@ public:
         if (pThread)
             free(pThread);
 
-        pThread = nullptr;
+        pThread      = nullptr;
         pThreadStack = nullptr;
     }
 
     //! Thread attributes
     enum eCThreadAttributes {
-        eAttributeNone = 0x07,
-        eAttributeAffCore0 = 0x01,
-        eAttributeAffCore1 = 0x02,
-        eAttributeAffCore2 = 0x04,
-        eAttributeDetach = 0x08,
+        eAttributeNone      = 0x07,
+        eAttributeAffCore0  = 0x01,
+        eAttributeAffCore1  = 0x02,
+        eAttributeAffCore2  = 0x04,
+        eAttributeDetach    = 0x08,
         eAttributePinnedAff = 0x10
     };
+
 private:
     static int threadCallback(int argc, const char **argv) {
         //! After call to start() continue with the internal function

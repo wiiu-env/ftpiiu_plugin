@@ -1,7 +1,7 @@
 #include "BackgroundThread.hpp"
-#include <cstring>
 #include "ftp.h"
 #include "net.h"
+#include <cstring>
 
 BackgroundThread *BackgroundThread::instance = nullptr;
 

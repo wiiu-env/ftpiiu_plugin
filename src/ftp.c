@@ -23,40 +23,39 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
+#include "main.h"
+#include "utils/logger.h"
+#include <coreinit/thread.h>
 #include <errno.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
-#include <coreinit/thread.h>
 #include <unistd.h>
-#include <errno.h>
-#include "main.h"
-#include "utils/logger.h"
 
 //! TODO: fix those function
-#define gettime()               OSGetTick()
+#define gettime() OSGetTick()
 
 #include "ftp.h"
-#include "virtualpath.h"
 #include "net.h"
+#include "virtualpath.h"
 #include "vrt.h"
 
-#define UNUSED    __attribute__((unused))
+#define UNUSED          __attribute__((unused))
 
 #define FTP_BUFFER_SIZE 1024
-#define MAX_CLIENTS 5
+#define MAX_CLIENTS     5
 
-static const uint16_t SRC_PORT = 20;
-static const int32_t EQUIT = 696969;
-static const char *CRLF = "\r\n";
+static const uint16_t SRC_PORT    = 20;
+static const int32_t EQUIT        = 696969;
+static const char *CRLF           = "\r\n";
 static const uint32_t CRLF_LENGTH = 2;
 
-static uint8_t num_clients = 0;
+static uint8_t num_clients   = 0;
 static uint16_t passive_port = 1024;
-static char *password = NULL;
+static char *password        = NULL;
 
-#define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ## ARGS);
+#define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ##ARGS);
 
 typedef int32_t (*data_connection_callback)(int32_t data_socket, void *arg);
 
@@ -108,7 +107,7 @@ static bool compare_ftp_password(char *password_attempt) {
 */
 static int32_t write_reply(client_t *client, uint16_t code, char *msg) {
     uint32_t msglen = 4 + strlen(msg) + CRLF_LENGTH;
-    char *msgbuf = (char *) malloc(msglen + 1);
+    char *msgbuf    = (char *) malloc(msglen + 1);
     if (msgbuf == NULL)
         return -ENOMEM;
     sprintf(msgbuf, "%u %s\r\n", code, msg);
@@ -131,9 +130,9 @@ static void close_passive_socket(client_t *client) {
 */
 static uint32_t split(char *s, char sep, uint32_t maxsplit, char *result[]) {
     uint32_t num_results = 0;
-    uint32_t result_pos = 0;
-    uint32_t trim_pos = 0;
-    bool in_word = false;
+    uint32_t result_pos  = 0;
+    uint32_t trim_pos    = 0;
+    bool in_word         = false;
     for (; *s; s++) {
         if (*s == sep) {
             if (num_results <= maxsplit) {
@@ -153,7 +152,7 @@ static uint32_t split(char *s, char sep, uint32_t maxsplit, char *result[]) {
             }
         }
         result[num_results - 1][result_pos++] = *s;
-        result[num_results - 1][result_pos] = '\0';
+        result[num_results - 1][result_pos]   = '\0';
     }
     if (trim_pos) {
         result[num_results - 1][trim_pos] = '\0';
@@ -182,7 +181,7 @@ static int32_t ftp_REIN(client_t *client, char *rest UNUSED) {
     close_passive_socket(client);
     strcpy(client->cwd, "/");
     client->representation_type = 'A';
-    client->authenticated = false;
+    client->authenticated       = false;
     return write_reply(client, 220, "Service ready for new user.");
 }
 
@@ -198,7 +197,7 @@ static int32_t ftp_SYST(client_t *client, char *rest UNUSED) {
 
 static int32_t ftp_TYPE(client_t *client, char *rest) {
     char representation_type[FTP_BUFFER_SIZE], param[FTP_BUFFER_SIZE];
-    char *args[] = {representation_type, param};
+    char *args[]      = {representation_type, param};
     uint32_t num_args = split(rest, ' ', 1, args);
     if (num_args == 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
@@ -288,7 +287,7 @@ static int32_t ftp_RNTO(client_t *client, char *path) {
     } else {
         result = write_reply(client, 550, strerror(
 
-                errno));
+                                                  errno));
     }
     *client->pending_rename = '\0';
     return result;
@@ -314,8 +313,8 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     set_blocking(client->passive_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
-    bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
+    bindAddress.sin_family      = AF_INET;
+    bindAddress.sin_port        = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     int32_t result;
     if ((result = network_bind(client->passive_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
@@ -327,10 +326,10 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
         return write_reply(client, 520, "Unable to listen on socket.");
     }
     char reply[49];
-    uint16_t port = bindAddress.sin_port;
-    uint32_t ip = network_gethostip();
+    uint16_t port       = bindAddress.sin_port;
+    uint32_t ip         = network_gethostip();
     struct in_addr addr = {};
-    addr.s_addr = ip;
+    addr.s_addr         = ip;
     console_printf("Listening for data connections at %s:%u...\n", inet_ntoa(addr), port);
     sprintf(reply, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
     return write_reply(client, 227, reply);
@@ -348,7 +347,7 @@ static int32_t ftp_PORT(client_t *client, char *portspec) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
     close_passive_socket(client);
-    uint16_t port = ((p1 & 0xff) << 8) | (p2 & 0xff);
+    uint16_t port            = ((p1 & 0xff) << 8) | (p2 & 0xff);
     client->address.sin_addr = sin_addr;
     client->address.sin_port = htons(port);
     console_printf("Set client address to %s:%u\n", addr_str, port);
@@ -364,8 +363,8 @@ static int32_t prepare_data_connection_active(client_t *client, data_connection_
     set_blocking(data_socket, false);
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
-    bindAddress.sin_family = AF_INET;
-    bindAddress.sin_port = htons(SRC_PORT);
+    bindAddress.sin_family      = AF_INET;
+    bindAddress.sin_port        = htons(SRC_PORT);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
     int32_t result;
     if ((result = network_bind(data_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
@@ -394,11 +393,11 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
         if (result < 0) {
             result = write_reply(client, 520, "Closing data connection, error occurred during transfer.");
         } else {
-            client->data_connection_connected = false;
-            client->data_callback = callback;
+            client->data_connection_connected    = false;
+            client->data_callback                = callback;
             client->data_connection_callback_arg = arg;
-            client->data_connection_cleanup = cleanup;
-            client->data_connection_timer = gettime() + OSSecondsToTicks(10);
+            client->data_connection_cleanup      = cleanup;
+            client->data_connection_timer        = gettime() + OSSecondsToTicks(10);
         }
     }
     return result;
@@ -413,7 +412,7 @@ static int32_t send_nlst(int32_t data_socket, DIR_P *iter) {
         if (end_index + 2 >= MAXPATHLEN)
             continue;
         strcpy(filename, dirent->d_name);
-        filename[end_index] = CRLF[0];
+        filename[end_index]     = CRLF[0];
         filename[end_index + 1] = CRLF[1];
         filename[end_index + 2] = '\0';
         if ((result = send_exact(data_socket, filename, strlen(filename))) < 0) {
@@ -426,8 +425,8 @@ static int32_t send_nlst(int32_t data_socket, DIR_P *iter) {
 static int32_t send_list(int32_t data_socket, DIR_P *iter) {
     struct stat st;
     int32_t result = 0;
-    time_t mtime = 0;
-    uint64_t size = 0;
+    time_t mtime   = 0;
+    uint64_t size  = 0;
     char filename[MAXPATHLEN];
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     struct dirent *dirent = NULL;
@@ -436,10 +435,10 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
         snprintf(filename, sizeof(filename), "%s/%s", iter->path, dirent->d_name);
         if (stat(filename, &st) == 0) {
             mtime = st.st_mtime;
-            size = st.st_size;
+            size  = st.st_size;
         } else {
             mtime = time(0);
-            size = 0;
+            size  = 0;
         }
 
         char timestamp[13];
@@ -614,14 +613,14 @@ static int32_t ftp_SITE_UNKNOWN(client_t *client, char *rest UNUSED) {
 }
 
 static int32_t ftp_SITE_LOAD(client_t *client, char *path UNUSED) {
-//   FILE *f = vrt_fopen(client->cwd, path, "rb");
-//   if (!f) return write_reply(client, 550, strerror(errno));
-//   char *real_path = to_real_path(client->cwd, path);
-//   if (!real_path) goto end;
-//   load_from_file(f, real_path);
-//   free(real_path);
-//   end:
-//   fclose(f);
+    //   FILE *f = vrt_fopen(client->cwd, path, "rb");
+    //   if (!f) return write_reply(client, 550, strerror(errno));
+    //   char *real_path = to_real_path(client->cwd, path);
+    //   if (!real_path) goto end;
+    //   load_from_file(f, real_path);
+    //   free(real_path);
+    //   end:
+    //   fclose(f);
     return write_reply(client, 500, "Unable to load.");
 }
 
@@ -639,7 +638,7 @@ static int32_t dispatch_to_handler(client_t *client, char *cmd_line, const char 
     return handlers[i](client, rest);
 }
 
-static const char *site_commands[] = {"LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", "LOAD", NULL};
+static const char *site_commands[]               = {"LOADER", "CLEAR", "CHMOD", "PASSWD", "NOPASSWD", "EJECT", "MOUNT", "UNMOUNT", "LOAD", NULL};
 static const ftp_command_handler site_handlers[] = {ftp_SITE_LOADER, ftp_SITE_CLEAR, ftp_SITE_CHMOD, ftp_SITE_PASSWD, ftp_SITE_NOPASSWD, ftp_SITE_EJECT, ftp_SITE_MOUNT, ftp_SITE_UNMOUNT,
                                                     ftp_SITE_LOAD, ftp_SITE_UNKNOWN};
 
@@ -663,7 +662,7 @@ static int32_t ftp_UNKNOWN(client_t *client, char *rest UNUSED) {
     return write_reply(client, 502, "Command not implemented.");
 }
 
-static const char *unauthenticated_commands[] = {"USER", "PASS", "QUIT", "REIN", "NOOP", NULL};
+static const char *unauthenticated_commands[]               = {"USER", "PASS", "QUIT", "REIN", "NOOP", NULL};
 static const ftp_command_handler unauthenticated_handlers[] = {ftp_USER, ftp_PASS, ftp_QUIT, ftp_REIN, ftp_NOOP, ftp_NEEDAUTH};
 
 static const char *authenticated_commands[] = {
@@ -671,15 +670,13 @@ static const char *authenticated_commands[] = {
         "SIZE", "PASV", "PORT", "TYPE", "SYST", "MODE",
         "RETR", "STOR", "APPE", "REST", "DELE", "MKD",
         "RMD", "RNFR", "RNTO", "NLST", "QUIT", "REIN",
-        "SITE", "NOOP", "ALLO", NULL
-};
+        "SITE", "NOOP", "ALLO", NULL};
 static const ftp_command_handler authenticated_handlers[] = {
         ftp_USER, ftp_PASS, ftp_LIST, ftp_PWD, ftp_CWD, ftp_CDUP,
         ftp_SIZE, ftp_PASV, ftp_PORT, ftp_TYPE, ftp_SYST, ftp_MODE,
         ftp_RETR, ftp_STOR, ftp_APPE, ftp_REST, ftp_DELE, ftp_MKD,
         ftp_DELE, ftp_RNFR, ftp_RNTO, ftp_NLST, ftp_QUIT, ftp_REIN,
-        ftp_SITE, ftp_NOOP, ftp_SUPERFLUOUS, ftp_UNKNOWN
-};
+        ftp_SITE, ftp_NOOP, ftp_SUPERFLUOUS, ftp_UNKNOWN};
 
 /*
 	returns negative to signal an error that requires closing the connection
@@ -691,7 +688,7 @@ static int32_t process_command(client_t *client, char *cmd_line) {
 
     console_printf("Got command: %s\n", cmd_line);
 
-    const char **commands = unauthenticated_commands;
+    const char **commands               = unauthenticated_commands;
     const ftp_command_handler *handlers = unauthenticated_handlers;
 
     if (client->authenticated) {
@@ -706,15 +703,15 @@ static void cleanup_data_resources(client_t *client) {
     if (client->data_socket >= 0 && client->data_socket != client->passive_socket) {
         network_close_blocking(client->data_socket);
     }
-    client->data_socket = -1;
+    client->data_socket               = -1;
     client->data_connection_connected = false;
-    client->data_callback = NULL;
+    client->data_callback             = NULL;
     if (client->data_connection_cleanup) {
         client->data_connection_cleanup(client->data_connection_callback_arg);
     }
     client->data_connection_callback_arg = NULL;
-    client->data_connection_cleanup = NULL;
-    client->data_connection_timer = 0;
+    client->data_connection_cleanup      = NULL;
+    client->data_connection_timer        = 0;
 }
 
 static void cleanup_client(client_t *client) {
@@ -768,20 +765,20 @@ static bool process_accept_events(int32_t server) {
             network_close(peer);
             return true;
         }
-        client->socket = peer;
+        client->socket              = peer;
         client->representation_type = 'A';
-        client->passive_socket = -1;
-        client->data_socket = -1;
+        client->passive_socket      = -1;
+        client->data_socket         = -1;
         strcpy(client->cwd, "/");
-        *client->pending_rename = '\0';
-        client->restart_marker = 0;
-        client->authenticated = false;
-        client->offset = 0;
-        client->data_connection_connected = false;
-        client->data_callback = NULL;
+        *client->pending_rename              = '\0';
+        client->restart_marker               = 0;
+        client->authenticated                = false;
+        client->offset                       = 0;
+        client->data_connection_connected    = false;
+        client->data_callback                = NULL;
         client->data_connection_callback_arg = NULL;
-        client->data_connection_cleanup = NULL;
-        client->data_connection_timer = 0;
+        client->data_connection_cleanup      = NULL;
+        client->data_connection_timer        = 0;
         memcpy(&client->address, &client_address, sizeof(client_address));
         int client_index;
         if (write_reply(client, 220, "ftpii") < 0) {
@@ -807,9 +804,9 @@ static void process_data_events(client_t *client) {
         if (client->passive_socket >= 0) {
             struct sockaddr_in data_peer_address;
             socklen_t addrlen = sizeof(data_peer_address);
-            result = network_accept(client->passive_socket, (struct sockaddr *) &data_peer_address, &addrlen);
+            result            = network_accept(client->passive_socket, (struct sockaddr *) &data_peer_address, &addrlen);
             if (result >= 0) {
-                client->data_socket = result;
+                client->data_socket               = result;
                 client->data_connection_connected = true;
             }
         } else {
@@ -890,7 +887,6 @@ static void process_control_events(client_t *client) {
                     goto recv_loop_end;
                 }
             }
-
         }
 
         if (next != client->buf) { // some lines were processed
@@ -902,7 +898,7 @@ static void process_control_events(client_t *client) {
     }
     console_printf("Received line longer than %u bytes, closing client.\n", FTP_BUFFER_SIZE - 1);
 
-    recv_loop_end:
+recv_loop_end:
     cleanup_client(client);
 }
 

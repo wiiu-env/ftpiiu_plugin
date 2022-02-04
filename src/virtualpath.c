@@ -26,18 +26,18 @@
 *
 * for WiiXplorer 2010
 ***************************************************************************/
-#include <malloc.h>
-#include <string.h>
 #include "virtualpath.h"
 #include "utils/logger.h"
+#include <malloc.h>
+#include <string.h>
 
-uint8_t MAX_VIRTUAL_PARTITIONS = 0;
+uint8_t MAX_VIRTUAL_PARTITIONS        = 0;
 VIRTUAL_PARTITION *VIRTUAL_PARTITIONS = NULL;
 
-uint8_t MAX_VIRTUAL_FS = 0;
+uint8_t MAX_VIRTUAL_FS        = 0;
 VIRTUAL_PARTITION *VIRTUAL_FS = NULL;
 
-uint8_t MAX_VIRTUAL_FS_VOL = 0;
+uint8_t MAX_VIRTUAL_FS_VOL        = 0;
 VIRTUAL_PARTITION *VIRTUAL_FS_VOL = NULL;
 
 void VirtualMountDevice(const char *path) {
@@ -57,13 +57,13 @@ void VirtualMountDevice(const char *path) {
             namestop = true;
 
         if (!namestop) {
-            name[i] = path[i];
-            name[i + 1] = '\0';
+            name[i]      = path[i];
+            name[i + 1]  = '\0';
             alias[i + 1] = path[i];
             alias[i + 2] = '\0';
         }
 
-        prefix[i] = path[i];
+        prefix[i]     = path[i];
         prefix[i + 1] = '\0';
         i++;
     } while (path[i - 1] != '/');
@@ -78,16 +78,16 @@ void AddVirtualPath(const char *name, const char *alias, const char *prefix) {
     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_PARTITIONS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_PARTITIONS + 1));
     if (!tmp) {
         free(VIRTUAL_PARTITIONS);
-        VIRTUAL_PARTITIONS = NULL;
+        VIRTUAL_PARTITIONS     = NULL;
         MAX_VIRTUAL_PARTITIONS = 0;
         return;
     }
 
     VIRTUAL_PARTITIONS = tmp;
 
-    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].name = strdup(name);
-    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].alias = strdup(alias);
-    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].prefix = strdup(prefix);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].name     = strdup(name);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].alias    = strdup(alias);
+    VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].prefix   = strdup(prefix);
     VIRTUAL_PARTITIONS[MAX_VIRTUAL_PARTITIONS].inserted = true;
 
     MAX_VIRTUAL_PARTITIONS++;
@@ -187,10 +187,10 @@ void UnmountVirtualPaths() {
     if (VIRTUAL_FS) {
         free(VIRTUAL_FS);
     }
-    VIRTUAL_PARTITIONS = NULL;
-    VIRTUAL_FS_VOL = NULL;
-    VIRTUAL_FS = NULL;
+    VIRTUAL_PARTITIONS     = NULL;
+    VIRTUAL_FS_VOL         = NULL;
+    VIRTUAL_FS             = NULL;
     MAX_VIRTUAL_PARTITIONS = 0;
-    MAX_VIRTUAL_FS = 0;
-    MAX_VIRTUAL_FS_VOL = 0;
+    MAX_VIRTUAL_FS         = 0;
+    MAX_VIRTUAL_FS_VOL     = 0;
 }

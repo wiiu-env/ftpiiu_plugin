@@ -23,12 +23,12 @@ misrepresented as being the original software.
 
 */
 
+#include "main.h"
 #include <malloc.h>
 #include <stdarg.h>
 #include <string.h>
 #include <sys/dirent.h>
 #include <unistd.h>
-#include "main.h"
 
 #include "virtualpath.h"
 #include "vrt.h"
@@ -47,39 +47,44 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     char *normalised_path = malloc(strlen(path) + 1);
     if (!normalised_path) goto end;
     *normalised_path = '\0';
-    char *curr_dir = normalised_path;
+    char *curr_dir   = normalised_path;
 
     uint32_t state = 0; // 0:start, 1:slash, 2:dot, 3:dotdot
-    char *token = path;
+    char *token    = path;
     while (1) {
         switch (state) {
             case 0:
                 if (*token == '/') {
-                    state = 1;
+                    state    = 1;
                     curr_dir = normalised_path + strlen(normalised_path);
                     strncat(normalised_path, token, 1);
                 }
                 break;
             case 1:
                 if (*token == '.') state = 2;
-                else if (*token != '/') state = 0;
+                else if (*token != '/')
+                    state = 0;
                 break;
             case 2:
                 if (*token == '/' || !*token) {
-                    state = 1;
+                    state           = 1;
                     *(curr_dir + 1) = '\0';
-                } else if (*token == '.') state = 3;
-                else state = 0;
+                } else if (*token == '.')
+                    state = 3;
+                else
+                    state = 0;
                 break;
             case 3:
                 if (*token == '/' || !*token) {
-                    state = 1;
-                    *curr_dir = '\0';
+                    state          = 1;
+                    *curr_dir      = '\0';
                     char *prev_dir = strrchr(normalised_path, '/');
                     if (prev_dir) curr_dir = prev_dir;
-                    else *curr_dir = '/';
+                    else
+                        *curr_dir = '/';
                     *(curr_dir + 1) = '\0';
-                } else state = 0;
+                } else
+                    state = 0;
                 break;
         }
         if (!*token) break;
@@ -92,7 +97,7 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
         normalised_path[--end] = '\x00';
     }
 
-    end:
+end:
     if (path != virtual_path) free(path);
     return normalised_path;
 }
@@ -127,8 +132,8 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     uint32_t i;
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
         VIRTUAL_PARTITION *partition = VIRTUAL_PARTITIONS + i;
-        const char *alias = partition->alias;
-        size_t alias_len = strlen(alias);
+        const char *alias            = partition->alias;
+        size_t alias_len             = strlen(alias);
         if (!strcasecmp(alias, virtual_path) || (!strncasecmp(alias, virtual_path, alias_len) && virtual_path[alias_len] == '/')) {
             prefix = partition->prefix;
             rest += alias_len;
@@ -149,7 +154,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     strcpy(path, prefix);
     strcat(path, rest);
 
-    end:
+end:
     free(virtual_path);
     return path;
 }
@@ -286,10 +291,10 @@ DIR_P *vrt_opendir(char *cwd, char *path) {
         return NULL;
     }
 
-    iter->virt_root = 0;
-    iter->virtual_fs = 0;
+    iter->virt_root      = 0;
+    iter->virtual_fs     = 0;
     iter->virtual_fs_vol = 0;
-    iter->path = real_path;
+    iter->path           = real_path;
 
     if (*iter->path == 0 || (strncmp(iter->path, "fs:", 3) == 0 && strlen(iter->path) <= 4) || (strncmp(iter->path, "fs:/vol", 3) == 0 && strlen(iter->path) <= 8)) {
         iter->dir = malloc(sizeof(DIR));
@@ -331,13 +336,13 @@ struct dirent *vrt_readdir(DIR_P *pDir) {
 
     DIR *iter = pDir->dir;
     if (pDir->virt_root || pDir->virtual_fs || pDir->virtual_fs_vol) {
-        int max = MAX_VIRTUAL_PARTITIONS;
+        int max                          = MAX_VIRTUAL_PARTITIONS;
         VIRTUAL_PARTITION *PARTITION_PTR = VIRTUAL_PARTITIONS;
         if (pDir->virtual_fs) {
-            max = MAX_VIRTUAL_FS;
+            max           = MAX_VIRTUAL_FS;
             PARTITION_PTR = VIRTUAL_FS;
         } else if (pDir->virtual_fs_vol) {
-            max = MAX_VIRTUAL_FS_VOL;
+            max           = MAX_VIRTUAL_FS_VOL;
             PARTITION_PTR = VIRTUAL_FS_VOL;
         }
         for (; (uint32_t) iter->position < max; iter->position++) {
