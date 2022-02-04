@@ -1,10 +1,10 @@
 #pragma once
 
 #include "utils/BackgroundThreadWrapper.hpp"
-#include <coreinit/cache.h>
 #include "utils/logger.h"
+#include <coreinit/cache.h>
 
-#define PORT                    21
+#define PORT 21
 
 class BackgroundThread : BackgroundThreadWrapper {
 public:

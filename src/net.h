@@ -25,18 +25,18 @@ misrepresented as being the original software.
 #define _NET_H_
 
 #ifdef __cplusplus
-extern "C"{
+extern "C" {
 #endif
 
-#include <stdint.h>
+#include <arpa/inet.h>
+#include <errno.h>
+#include <netinet/in.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/time.h>
 #include <sys/types.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
 #include <unistd.h>
-#include <errno.h>
-#include <stdio.h>
 
 #if 0
 void initialise_network();

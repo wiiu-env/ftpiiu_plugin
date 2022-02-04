@@ -1,8 +1,8 @@
 #pragma once
 
 #include "CThread.h"
-#include <wut_types.h>
 #include <mutex>
+#include <wut_types.h>
 
 class BackgroundThreadWrapper : public CThread {
 public:
@@ -20,6 +20,7 @@ protected:
     }
 
     std::recursive_mutex mutex;
+
 private:
     void executeThread() override;
 

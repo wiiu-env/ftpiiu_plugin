@@ -1,15 +1,15 @@
-#include <wups.h>
+#include "BackgroundThread.hpp"
+#include "utils/logger.h"
+#include "virtualpath.h"
+#include <coreinit/cache.h>
+#include <coreinit/dynload.h>
 #include <cstring>
 #include <iosuhax.h>
 #include <iosuhax_devoptab.h>
 #include <iosuhax_disc_interface.h>
-#include <coreinit/dynload.h>
 #include <nn/ac.h>
-#include <coreinit/cache.h>
-#include "utils/logger.h"
 #include <whb/log_udp.h>
-#include "virtualpath.h"
-#include "BackgroundThread.hpp"
+#include <wups.h>
 
 WUPS_PLUGIN_NAME("FTPiiU");
 WUPS_PLUGIN_DESCRIPTION("FTP Server");
@@ -20,8 +20,8 @@ WUPS_PLUGIN_LICENSE("GPL");
 WUPS_USE_WUT_DEVOPTAB();
 
 uint32_t hostIpAddress = 0;
-int iosuhaxMount = 0;
-int fsaFd = -1;
+int iosuhaxMount       = 0;
+int fsaFd              = -1;
 
 BackgroundThread *thread = nullptr;
 
@@ -112,4 +112,3 @@ ON_APPLICATION_REQUESTS_EXIT() {
 
     deinitLogging();
 }
-
