@@ -2,6 +2,7 @@
 #include "ftp.h"
 #include "net.h"
 #include <cstring>
+#include <sys/socket.h>
 
 BackgroundThread *BackgroundThread::instance = nullptr;
 
@@ -20,6 +21,7 @@ BackgroundThread::~BackgroundThread() {
     mutex.lock();
     if (this->serverSocket >= 0) {
         cleanup_ftp();
+        ::shutdown(this->serverSocket, SHUT_WR);
         network_close(this->serverSocket);
         this->serverSocket = -1;
     }
