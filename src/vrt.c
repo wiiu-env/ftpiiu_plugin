@@ -179,7 +179,13 @@ typedef void *(*path_func)(char *path, ...);
 
 static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_path, int32_t failed, ...) {
     char *path = to_real_path(virtual_cwd, virtual_path);
-    if (!path || !*path) return (void *) failed;
+    if (!path || !*path) {
+        if (path && path != virtual_path) {
+            free(path);
+            path = NULL;
+        }
+        return (void *) failed;
+    }
 
     path_func f = (path_func) void_f;
     va_list ap;
@@ -238,6 +244,10 @@ static int vrt_checkdir(char *cwd, char *path) {
     if (!real_path) {
         return -1;
     } else if (!*real_path || (strcmp(path, ".") == 0) || (strlen(cwd) == 1) || ((strlen(cwd) > 1) && (strcmp(path, "..") == 0))) {
+        if (path != real_path) {
+            free(real_path);
+            real_path = NULL;
+        }
         return 0;
     }
     free(real_path);
