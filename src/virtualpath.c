@@ -124,6 +124,7 @@ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix
     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS_VOL, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS_VOL + 1));
     if (!tmp) {
         free(VIRTUAL_FS_VOL);
+        VIRTUAL_FS_VOL     = NULL;
         MAX_VIRTUAL_FS_VOL = 0;
         return;
     }
@@ -157,35 +158,43 @@ void UnmountVirtualPaths() {
     for (i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
         if (VIRTUAL_PARTITIONS[i].name) {
             free(VIRTUAL_PARTITIONS[i].name);
+            VIRTUAL_PARTITIONS[i].name = NULL;
         }
         if (VIRTUAL_PARTITIONS[i].alias) {
             free(VIRTUAL_PARTITIONS[i].alias);
+            VIRTUAL_PARTITIONS[i].name = NULL;
         }
         if (VIRTUAL_PARTITIONS[i].prefix) {
             free(VIRTUAL_PARTITIONS[i].prefix);
+            VIRTUAL_PARTITIONS[i].prefix = NULL;
         }
     }
 
     for (i = 0; i < MAX_VIRTUAL_FS_VOL; i++) {
         if (VIRTUAL_FS_VOL[i].name) {
             free(VIRTUAL_FS_VOL[i].name);
+            VIRTUAL_FS_VOL[i].name = NULL;
         }
     }
 
     for (i = 0; i < MAX_VIRTUAL_FS; i++) {
         if (VIRTUAL_FS[i].name) {
             free(VIRTUAL_FS[i].name);
+            VIRTUAL_FS[i].name = NULL;
         }
     }
 
     if (VIRTUAL_PARTITIONS) {
         free(VIRTUAL_PARTITIONS);
+        VIRTUAL_PARTITIONS = NULL;
     }
     if (VIRTUAL_FS_VOL) {
         free(VIRTUAL_FS_VOL);
+        VIRTUAL_FS_VOL = NULL;
     }
     if (VIRTUAL_FS) {
         free(VIRTUAL_FS);
+        VIRTUAL_FS = NULL;
     }
     VIRTUAL_PARTITIONS     = NULL;
     VIRTUAL_FS_VOL         = NULL;

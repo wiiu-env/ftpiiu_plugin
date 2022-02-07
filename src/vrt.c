@@ -98,7 +98,10 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     }
 
 end:
-    if (path != virtual_path) free(path);
+    if (path != virtual_path) {
+        free(path);
+        path = NULL;
+    }
     return normalised_path;
 }
 
@@ -156,6 +159,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
 
 end:
     free(virtual_path);
+    virtual_path = NULL;
     return path;
 }
 
@@ -219,6 +223,7 @@ static void *with_virtual_path(void *virtual_cwd, void *void_f, char *virtual_pa
     }
 
     free(path);
+    path = NULL;
     return result;
 }
 
@@ -236,6 +241,7 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
         return 0;
     }
     free(real_path);
+    real_path = NULL;
     return (int) with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
@@ -251,6 +257,7 @@ static int vrt_checkdir(char *cwd, char *path) {
         return 0;
     }
     free(real_path);
+    real_path = NULL;
     return (int) with_virtual_path(cwd, checkdir, path, -1, NULL);
 }
 
@@ -267,6 +274,7 @@ int vrt_chdir(char *cwd, char *path) {
     strcpy(cwd, abspath);
     if (cwd[1]) strcat(cwd, "/");
     free(abspath);
+    abspath = NULL;
     return 0;
 }
 
@@ -283,6 +291,7 @@ int vrt_rename(char *cwd, char *from_path, char *to_path) {
     if (!real_to_path || !*real_to_path) return -1;
     int result = (int) with_virtual_path(cwd, rename, from_path, -1, real_to_path, NULL);
     free(real_to_path);
+    real_to_path = NULL;
     return result;
 }
 
@@ -297,6 +306,7 @@ DIR_P *vrt_opendir(char *cwd, char *path) {
     if (!iter) {
         if (*real_path != 0) {
             free(real_path);
+            real_path = NULL;
         }
         return NULL;
     }
@@ -311,6 +321,7 @@ DIR_P *vrt_opendir(char *cwd, char *path) {
         if (!iter->dir) {
             // root path is not allocated
             free(iter);
+            iter = NULL;
             return NULL;
         }
         memset(iter->dir, 0, sizeof(DIR));
@@ -330,7 +341,9 @@ DIR_P *vrt_opendir(char *cwd, char *path) {
     iter->dir = with_virtual_path(cwd, opendir, path, 0, NULL);
     if (!iter->dir) {
         free(iter->path);
+        iter->path = NULL;
         free(iter);
+        iter = NULL;
         return NULL;
     }
 
@@ -378,17 +391,22 @@ int vrt_closedir(DIR_P *iter) {
     if (!iter) return -1;
 
     if (iter->dir) {
-        if (iter->virt_root)
+        if (iter->virt_root) {
             free(iter->dir);
-        else
+            iter->dir = NULL;
+        } else {
             closedir(iter->dir);
+        }
     }
 
     // root path is not allocated
-    if (iter->path && *iter->path != 0)
+    if (iter->path && *iter->path != 0) {
         free(iter->path);
+        iter->path = NULL;
+    }
 
     free(iter);
+    iter = NULL;
 
     return 0;
 }
