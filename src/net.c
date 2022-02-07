@@ -252,9 +252,11 @@ int32_t send_from_file(int32_t s, FILE *f) {
         goto end;
     }
     free(buf);
+    buf = NULL;
     return -EAGAIN;
 end:
     free(buf);
+    buf = NULL;
     return result;
 }
 
@@ -274,15 +276,18 @@ int32_t recv_to_file(int32_t s, FILE *f) {
                 goto try_again_with_smaller_buffer;
             }
             free(buf);
+            buf = NULL;
             return bytes_read;
         } else if (bytes_read == 0) {
             free(buf);
+            buf = NULL;
             return 0;
         }
 
         int32_t bytes_written = fwrite(buf, 1, bytes_read, f);
         if (bytes_written < bytes_read) {
             free(buf);
+            buf = NULL;
             return -1;
         }
     }

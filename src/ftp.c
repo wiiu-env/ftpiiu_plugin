@@ -85,8 +85,10 @@ typedef struct client_struct client_t;
 static client_t *clients[MAX_CLIENTS] = {NULL};
 
 void set_ftp_password(char *new_password) {
-    if (password)
+    if (password) {
         free(password);
+        password = NULL;
+    }
     if (new_password) {
         password = malloc(strlen(new_password) + 1);
         if (!password)
@@ -114,6 +116,7 @@ static int32_t write_reply(client_t *client, uint16_t code, char *msg) {
     console_printf("Wrote reply: %s", msgbuf);
     int32_t ret = send_exact(client->socket, msgbuf, msglen);
     free(msgbuf);
+    msgbuf = NULL;
     return ret;
 }
 
@@ -532,8 +535,9 @@ static int32_t stor_or_append(client_t *client, FILE *f) {
 static int32_t ftp_STOR(client_t *client, char *path) {
     FILE *f = vrt_fopen(client->cwd, path, "wb");
     int fd;
-    if (f)
+    if (f) {
         fd = fileno(f);
+    }
     if (f && client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
         int32_t lseek_error = errno;
         fclose(f);
@@ -726,6 +730,7 @@ static void cleanup_client(client_t *client) {
         }
     }
     free(client);
+    client = NULL;
     num_clients--;
     console_printf("Client disconnected.\n");
 }
@@ -785,6 +790,7 @@ static bool process_accept_events(int32_t server) {
             console_printf("Error writing greeting.\n");
             network_close_blocking(peer);
             free(client);
+            client = NULL;
         } else {
             for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
                 if (!clients[client_index]) {
