@@ -120,7 +120,9 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     }
 
     virtual_path = virtual_abspath(virtual_cwd, virtual_path);
-    if (!virtual_path) return NULL;
+    if (!virtual_path) {
+        return NULL;
+    }
 
     char *path = NULL;
     char *rest = virtual_path;
@@ -153,10 +155,14 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     }
 
     size_t real_path_size = strlen(prefix) + strlen(rest) + 1;
-    if (real_path_size > MAXPATHLEN) goto end;
+    if (real_path_size > MAXPATHLEN) {
+        goto end;
+    }
 
     path = malloc(real_path_size);
-    if (!path) goto end;
+    if (!path) {
+        goto end;
+    }
     strcpy(path, prefix);
     strcat(path, rest);
 
@@ -275,7 +281,9 @@ int vrt_chdir(char *cwd, char *path) {
         return -1;
     }
     strcpy(cwd, abspath);
-    if (cwd[1]) strcat(cwd, "/");
+    if (cwd[1]) {
+        strcat(cwd, "/");
+    }
     free(abspath);
     abspath = NULL;
     return 0;
