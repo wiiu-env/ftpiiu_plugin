@@ -127,7 +127,10 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
 
     if (!strcmp("/", virtual_path)) {
         // indicate vfs-root with ""
-        path = "";
+        path = malloc(1);
+        if (path) {
+            path[0] = 0;
+        }
         goto end;
     }
 
