@@ -446,7 +446,17 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
 
         char timestamp[13];
         strftime(timestamp, sizeof(timestamp), "%b %d  %Y", localtime(&mtime));
-        snprintf(line, sizeof(line), "%crwxr-xr-x	1 0		0	 %10llu %s %s\r\n", (dirent->d_type & DT_DIR) ? 'd' : '-', size, timestamp, dirent->d_name);
+        snprintf(line, sizeof(line), "%c%s%s%s%s%s%s%s%s%s	1 0		0	 %10llu %s %s\r\n", (dirent->d_type & DT_DIR) ? 'd' : '-',
+                 st.st_mode & S_IRUSR ? "r" : "-",
+                 st.st_mode & S_IWUSR ? "w" : "-",
+                 st.st_mode & S_IXUSR ? "x" : "-",
+                 st.st_mode & S_IRGRP ? "r" : "-",
+                 st.st_mode & S_IWGRP ? "w" : "-",
+                 st.st_mode & S_IXGRP ? "x" : "-",
+                 st.st_mode & S_IROTH ? "r" : "-",
+                 st.st_mode & S_IWOTH ? "w" : "-",
+                 st.st_mode & S_IXOTH ? "x" : "-",
+                 size, timestamp, dirent->d_name);
         if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
             break;
         }
