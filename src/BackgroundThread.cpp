@@ -12,7 +12,7 @@ BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread:
     this->serverSocket = create_server(PORT);
     DCFlushRange(&(this->serverSocket), 4);
     mutex.unlock();
-    DEBUG_FUNCTION_LINE("Resume Thread");
+    DEBUG_FUNCTION_LINE_VERBOSE("Resume Thread");
     CThread::resumeThread();
 }
 
@@ -33,7 +33,7 @@ BOOL BackgroundThread::whileLoop() {
     if (this->serverSocket >= 0) {
         network_down = process_ftp_events(this->serverSocket);
         if (network_down) {
-            DEBUG_FUNCTION_LINE("Network is down %d", this->serverSocket);
+            DEBUG_FUNCTION_LINE_VERBOSE("Network is down %d", this->serverSocket);
             cleanup_ftp();
             network_close(this->serverSocket);
             this->serverSocket = -1;
