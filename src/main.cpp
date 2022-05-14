@@ -2,13 +2,11 @@
 #include "utils/logger.h"
 #include "virtualpath.h"
 #include <coreinit/cache.h>
-#include <coreinit/dynload.h>
 #include <cstring>
 #include <iosuhax.h>
 #include <iosuhax_devoptab.h>
 #include <iosuhax_disc_interface.h>
 #include <nn/ac.h>
-#include <whb/log_udp.h>
 #include <wups.h>
 
 WUPS_PLUGIN_NAME("FTPiiU");
@@ -41,18 +39,16 @@ ON_APPLICATION_START() {
     AddVirtualFSVOLPath("external01", nullptr, nullptr);
     AddVirtualFSVOLPath("content", nullptr, nullptr);
 
-    DEBUG_FUNCTION_LINE("IOSUHAX_Open");
     int res = IOSUHAX_Open(nullptr);
     if (res < 0) {
-        DEBUG_FUNCTION_LINE("IOSUHAX_open failed");
+        DEBUG_FUNCTION_LINE_ERR("IOSUHAX_open failed");
     } else {
         iosuhaxMount = 1;
         //fatInitDefault();
 
-        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open");
         fsaFd = IOSUHAX_FSA_Open();
         if (fsaFd < 0) {
-            DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open failed");
+            DEBUG_FUNCTION_LINE_ERR("IOSUHAX_FSA_Open failed");
         }
 
         DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open done");
@@ -86,10 +82,10 @@ void stopThread() {
 }
 
 ON_APPLICATION_REQUESTS_EXIT() {
-    DEBUG_FUNCTION_LINE("Ending ftp server");
+    DEBUG_FUNCTION_LINE_VERBOSE("Ending ftp server");
     stopThread();
 
-    DEBUG_FUNCTION_LINE("Ended ftp Server.");
+    DEBUG_FUNCTION_LINE_VERBOSE("Ended ftp Server.");
 
     if (iosuhaxMount) {
         IOSUHAX_sdio_disc_interface.shutdown();
