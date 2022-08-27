@@ -48,7 +48,7 @@ CXXFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
 CFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
 endif
 
-LIBS	:= -lwups -lwut -liosuhax
+LIBS	:= -lwups -lwut -lmocha
 
 #-------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level
