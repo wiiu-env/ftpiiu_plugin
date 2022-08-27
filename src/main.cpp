@@ -3,9 +3,7 @@
 #include "virtualpath.h"
 #include <coreinit/cache.h>
 #include <cstring>
-#include <iosuhax.h>
-#include <iosuhax_devoptab.h>
-#include <iosuhax_disc_interface.h>
+#include <mocha/mocha.h>
 #include <nn/ac.h>
 #include <wups.h>
 
@@ -18,10 +16,23 @@ WUPS_PLUGIN_LICENSE("GPL");
 WUPS_USE_WUT_DEVOPTAB();
 
 uint32_t hostIpAddress = 0;
-int iosuhaxMount       = 0;
-int fsaFd              = -1;
 
 BackgroundThread *thread = nullptr;
+
+MochaUtilsStatus MountWrapper(const char *mount, const char *dev, const char *mountTo) {
+    auto res = Mocha_MountFS(mount, dev, mountTo);
+    if (res == MOCHA_RESULT_ALREADY_EXISTS) {
+        res = Mocha_MountFS(mount, nullptr, mountTo);
+    }
+    if (res == MOCHA_RESULT_SUCCESS) {
+        std::string mountPath = std::string(mount) + ":/";
+        VirtualMountDevice(mountPath.c_str());
+        DEBUG_FUNCTION_LINE_VERBOSE("Mounted %s", mountPath.c_str());
+    } else {
+        DEBUG_FUNCTION_LINE_ERR("Failed to mount %s: %s [%d]", mount, Mocha_GetStatusStr(res), res);
+    }
+    return res;
+}
 
 /* Entry point */
 ON_APPLICATION_START() {
@@ -38,39 +49,18 @@ ON_APPLICATION_START() {
     AddVirtualFSPath("vol", nullptr, nullptr);
     AddVirtualFSVOLPath("external01", nullptr, nullptr);
     AddVirtualFSVOLPath("content", nullptr, nullptr);
-
-    int res = IOSUHAX_Open(nullptr);
-    if (res < 0) {
-        DEBUG_FUNCTION_LINE_ERR("IOSUHAX_open failed");
+    MochaUtilsStatus res;
+    if ((res = Mocha_InitLibrary()) == MOCHA_RESULT_SUCCESS) {
+        MountWrapper("slccmpt01", "/dev/slccmpt01", "/vol/storage_slccmpt01");
+        MountWrapper("storage_odd_tickets", nullptr, "/vol/storage_odd01");
+        MountWrapper("storage_odd_updates", nullptr, "/vol/storage_odd02");
+        MountWrapper("storage_odd_content", nullptr, "/vol/storage_odd03");
+        MountWrapper("storage_odd_content2", nullptr, "/vol/storage_odd04");
+        MountWrapper("storage_slc", "/dev/slc01", "/vol/storage_slc01");
+        Mocha_MountFS("storage_mlc", nullptr, "/vol/storage_mlc01");
+        Mocha_MountFS("storage_usb", nullptr, "/vol/storage_usb01");
     } else {
-        iosuhaxMount = 1;
-        //fatInitDefault();
-
-        fsaFd = IOSUHAX_FSA_Open();
-        if (fsaFd < 0) {
-            DEBUG_FUNCTION_LINE_ERR("IOSUHAX_FSA_Open failed");
-        }
-
-        DEBUG_FUNCTION_LINE("IOSUHAX_FSA_Open done");
-
-        mount_fs("slccmpt01", fsaFd, "/dev/slccmpt01", "/vol/storage_slccmpt01");
-        mount_fs("storage_odd_tickets", fsaFd, "/dev/odd01", "/vol/storage_odd_tickets");
-        mount_fs("storage_odd_updates", fsaFd, "/dev/odd02", "/vol/storage_odd_updates");
-        mount_fs("storage_odd_content", fsaFd, "/dev/odd03", "/vol/storage_odd_content");
-        mount_fs("storage_odd_content2", fsaFd, "/dev/odd04", "/vol/storage_odd_content2");
-        mount_fs("storage_slc", fsaFd, nullptr, "/vol/system");
-        mount_fs("storage_mlc", fsaFd, nullptr, "/vol/storage_mlc01");
-        mount_fs("storage_usb", fsaFd, nullptr, "/vol/storage_usb01");
-
-        VirtualMountDevice("slccmpt01:/");
-        VirtualMountDevice("storage_odd_tickets:/");
-        VirtualMountDevice("storage_odd_updates:/");
-        VirtualMountDevice("storage_odd_content:/");
-        VirtualMountDevice("storage_odd_content2:/");
-        VirtualMountDevice("storage_slc:/");
-        VirtualMountDevice("storage_mlc:/");
-        VirtualMountDevice("storage_usb:/");
-        VirtualMountDevice("usb:/");
+        DEBUG_FUNCTION_LINE_ERR("Failed to init libmocha: %s [%d]", Mocha_GetStatusStr(res), res);
     }
 
     thread = BackgroundThread::getInstance();
@@ -87,21 +77,14 @@ ON_APPLICATION_REQUESTS_EXIT() {
 
     DEBUG_FUNCTION_LINE_VERBOSE("Ended ftp Server.");
 
-    if (iosuhaxMount) {
-        IOSUHAX_sdio_disc_interface.shutdown();
-        IOSUHAX_usb_disc_interface.shutdown();
-
-        unmount_fs("slccmpt01");
-        unmount_fs("storage_odd_tickets");
-        unmount_fs("storage_odd_updates");
-        unmount_fs("storage_odd_content");
-        unmount_fs("storage_odd_content2");
-        unmount_fs("storage_slc");
-        unmount_fs("storage_mlc");
-        unmount_fs("storage_usb");
-        IOSUHAX_FSA_Close(fsaFd);
-        IOSUHAX_Close();
-    }
+    Mocha_UnmountFS("slccmpt01");
+    Mocha_UnmountFS("storage_odd_tickets");
+    Mocha_UnmountFS("storage_odd_updates");
+    Mocha_UnmountFS("storage_odd_content");
+    Mocha_UnmountFS("storage_odd_content2");
+    Mocha_UnmountFS("storage_slc");
+    Mocha_UnmountFS("storage_mlc");
+    Mocha_UnmountFS("storage_usb");
 
     DEBUG_FUNCTION_LINE("Unmount virtual paths");
     UnmountVirtualPaths();

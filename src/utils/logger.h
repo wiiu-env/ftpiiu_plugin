@@ -8,11 +8,15 @@
 extern "C" {
 #endif
 
-#define LOG_APP_TYPE                                                "P"
-#define LOG_APP_NAME                                                "ftpiiu"
+#define LOG_APP_TYPE "P"
+#define LOG_APP_NAME "ftpiiu"
 
-#define __FILENAME_X__                                              (strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__)
-#define __FILENAME__                                                (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILENAME_X__)
+#define __FILENAME__ ({                                \
+    const char *__filename = __FILE__;                 \
+    const char *__pos      = strrchr(__filename, '/'); \
+    if (!__pos) __pos = strrchr(__filename, '\\');     \
+    __pos ? __pos + 1 : __filename;                    \
+})
 
 #define LOG(LOG_FUNC, FMT, ARGS...)                                 LOG_EX_DEFAULT(LOG_FUNC, "", "", FMT, ##ARGS)
 
