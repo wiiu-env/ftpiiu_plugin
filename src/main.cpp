@@ -86,6 +86,8 @@ ON_APPLICATION_REQUESTS_EXIT() {
     Mocha_UnmountFS("storage_mlc");
     Mocha_UnmountFS("storage_usb");
 
+    Mocha_DeInitLibrary();
+
     DEBUG_FUNCTION_LINE("Unmount virtual paths");
     UnmountVirtualPaths();
 
