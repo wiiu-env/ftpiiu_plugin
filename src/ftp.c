@@ -444,6 +444,11 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
             size  = 0;
         }
 
+        // if the date is past 2040-01-01 then use the current date instead.
+        if (mtime > 0x2208985200L) {
+            mtime = time(0);
+        }
+
         char timestamp[13];
         strftime(timestamp, sizeof(timestamp), "%b %d  %Y", localtime(&mtime));
         snprintf(line, sizeof(line), "%c%s%s%s%s%s%s%s%s%s	1 0		0	 %10llu %s %s\r\n", (dirent->d_type & DT_DIR) ? 'd' : '-',
