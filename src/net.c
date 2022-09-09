@@ -79,7 +79,7 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 
         
         // Activate WinScale
-        setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable))
+        setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
 	}
     return sock;
 }
@@ -245,7 +245,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
 
     // The system double the value set
     int sndBuffSize = FREAD_BUFFER_SIZE/2;
-    setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize))
+    setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
     char *buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
     if (!buf)
@@ -277,7 +277,7 @@ int32_t recv_to_file(int32_t s, FILE *f) {
 
     // The system double the value set
     int rcvBuffSize = NET_BUFFER_SIZE/2;
-    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize))
+    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
     char *buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
     if (!buf)
