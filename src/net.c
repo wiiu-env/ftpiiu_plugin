@@ -35,11 +35,11 @@ misrepresented as being the original software.
 
 #define MAX_NET_BUFFER_SIZE (128 * 1024)
 #define MIN_NET_BUFFER_SIZE 4096
-#define FREAD_BUFFER_SIZE   (128 * 1024)
+# define NET_RETRY_TIME_STEP_MILLISECS 10
 
 extern uint32_t hostIpAddress;
 
-static uint32_t NET_BUFFER_SIZE = MAX_NET_BUFFER_SIZE;
+static const uint32_t SOCKET_BUFFER_SIZE = MAX_NET_BUFFER_SIZE;
 
 #if 0
 void initialise_network() {
@@ -63,7 +63,8 @@ void initialise_network() {
             addr.s_addr = ip;
             printf("Network initialised.  Wii IP address: %s\n", inet_ntoa(addr));
         }
-    }
+
+
 }
 #endif
 
@@ -129,24 +130,58 @@ int32_t network_read(int32_t s, void *mem, int32_t len) {
     return res;
 }
 
+static int32_t network_readChunk(int32_t s, void *mem, int32_t len) {
+
+    int32_t received = 0;
+    int ret = -1;
+
+    // while buffer is not full (len>0)
+    while (len>0)
+    {
+        // max ret value is 2*SOCKET_BUFFER_SIZE
+        ret = recv(s, mem, len, 0);        
+        if (ret == 0) {
+            // client EOF detected
+            break;
+        } else if (ret < 0 && wiiu_geterrno() != EAGAIN) {
+            int err = -wiiu_geterrno();
+            received = (err < 0) ? err : ret;
+            break;
+        } else {
+            if (ret > 0) {
+                received += ret;
+                len -= ret;
+                mem += ret;
+            }
+        }
+    }
+    // here len could be < 0 and so more than len bytes are read
+    // received > len and mem up to date
+    return received;
+}
 uint32_t network_gethostip() {
     return hostIpAddress;
 }
 
-int32_t network_write(int32_t s, const void *mem, int32_t len) {
+int32_t network_write(int32_t s, const void *mem, int32_t len)
+{
     int32_t transfered = 0;
-
-    while (len) {
+    
+    while (len)
+    {
         int ret = send(s, mem, len, 0);
-        if (ret < 0) {
-            int err    = -wiiu_geterrno();
+        if (ret < 0 && wiiu_geterrno() != EAGAIN)
+        {
+            int err = -wiiu_geterrno();
             transfered = (err < 0) ? err : ret;
             break;
+        } else {
+            if (ret > 0) {
+                mem += ret;
+                transfered += ret;
+                len -= ret;
+            }
         }
-
-        mem += ret;
-        transfered += ret;
-        len -= ret;
     }
     return transfered;
 }
@@ -207,107 +242,148 @@ int32_t create_server(uint16_t port) {
     return server;
 }
 
-typedef int32_t (*transferrer_type)(int32_t s, void *mem, int32_t len);
 
-static int32_t transfer_exact(int32_t s, char *buf, int32_t length, transferrer_type transferrer) {
-    int32_t result    = 0;
+int32_t send_exact(int32_t s, char *buf, int32_t length) {
+    int buf_size = length;
+    int32_t result = 0;
     int32_t remaining = length;
     int32_t bytes_transferred;
+    
     set_blocking(s, true);
     while (remaining) {
-    try_again_with_smaller_buffer:
-        bytes_transferred = transferrer(s, buf, MIN(remaining, (int) NET_BUFFER_SIZE));
+
+        bytes_transferred = network_write(s, buf, MIN(remaining, (int) buf_size));
+        
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
         } else if (bytes_transferred < 0) {
-            if (bytes_transferred == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
-                usleep(1000);
-                goto try_again_with_smaller_buffer;
-            }
+            
             result = bytes_transferred;
             break;
         } else {
-            result = -ENODATA;
+            // result = bytes_transferred = 0
+            result = bytes_transferred;                            
             break;
         }
+
     }
     set_blocking(s, false);
+    
     return result;
 }
 
-int32_t send_exact(int32_t s, char *buf, int32_t length) {
-    return transfer_exact(s, buf, length, (transferrer_type) network_write);
-}
 
 int32_t send_from_file(int32_t s, FILE *f) {
-
-    // The system double the value set
-    int sndBuffSize = FREAD_BUFFER_SIZE/2;
+    // return code
+    int32_t result = 0;
+    
+    // max value for SNDBUF = SOCKET_BUFFER_SIZE (the system double the value set)
+    int sndBuffSize = SOCKET_BUFFER_SIZE/2;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
-    char *buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
+    int32_t dlBufferSize = sndBuffSize*2;
+	
+    char *buf = (char *) memalign(0x40, dlBufferSize);
     if (!buf)
         return -1;
 
-    int32_t bytes_read;
-    int32_t result = 0;
 
-    bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
-    if (bytes_read > 0) {
-        result = send_exact(s, buf, bytes_read);
-        if (result < 0)
-            goto end;
+    int32_t bytes_read = dlBufferSize;        
+	while (bytes_read) {
+
+        bytes_read = fread(buf, 1, dlBufferSize, f);
+        if (bytes_read == 0) {
+            // SUCCESS, no more to write                  
+            result = 0;
+            break;
+        }        
+        if (bytes_read > 0) {
+        
+            int32_t remaining = bytes_read;            
+
+            // Let buffer on file be larger than socket one for checking performances scenarii 
+            while (remaining) {
+            
+                result = network_write(s, buf, MIN(remaining, dlBufferSize));
+
+                
+                if (result < 0) {
+                    // result = error, connection will be closed
+                    break;
+                } else {
+                
+                    remaining -= result;                    
+                                        
+                }
+            }        
+		}
+        if (result >=0) {
+                
+            // check bytes read (now because on the last sending, data is already sent here = result)
+            if (bytes_read < dlBufferSize) {
+                    
+            	if (bytes_read < 0 || feof(f) == 0 || ferror(f) != 0) {
+                    // ERROR : not on eof file or read error, or error on stream => ERROR
+                    result = -103;
+                    break;
+                }
+            }
+            
+            // result = 0 and EOF
+            if ((feof(f) != 0) && (result == 0)) {
+                // SUCESS : eof file, last data bloc sent
+                break;
+            }
+        }
     }
-    if (bytes_read < FREAD_BUFFER_SIZE) {
-        result = -!feof(f);
-        goto end;
-    }
-    free(buf);
-    buf = NULL;
-    return -EAGAIN;
-end:
-    free(buf);
-    buf = NULL;
+
     return result;
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-
-    // The system double the value set
-    int rcvBuffSize = NET_BUFFER_SIZE/2;
+    // return code
+    int32_t result = 0;
+    
+    // (the system double the value set)
+    int rcvBuffSize = SOCKET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
-
-    char *buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
-    if (!buf)
+    
+    char *buf = (char *) memalign(0x40, rcvBuffSize);
+    if (!buf) {
         return -1;
+	}
 
-    int32_t bytes_read;
-    while (1) {
-    try_again_with_smaller_buffer:
-        bytes_read = network_read(s, buf, NET_BUFFER_SIZE);
-        if (bytes_read < 0) {
-            if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
-                usleep(1000);
-                goto try_again_with_smaller_buffer;
+	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes
+	// considering a buffer size of UL_BUFFER_SIZE - (rcvBuffSize*2) with UL_BUFFER_SIZE >= 2*(rcvBuffSize*2) will handle the overflow
+	uint32_t chunckSize = 8*SOCKET_BUFFER_SIZE - (rcvBuffSize*2);
+    int32_t bytes_received = chunckSize;
+    while (bytes_received) {
+                        
+        bytes_received = network_readChunk(s, buf, chunckSize);
+        
+        if (bytes_received == 0) {
+            // SUCCESS, no more to write to file
+            result = 0;
+                        
+        } else if (bytes_received < 0) {
+
+            // result = error, connection will be closed
+            result = bytes_received;
+            break;
+        } else {
+            // bytes_received > 0
+ 
+            // write bytes_received to f
+            result = fwrite(buf, 1, bytes_received, f);
+            
+            if ((result < 0 && result < bytes_received) || ferror(f) != 0) {
+                // error when writing f
+                result = -100;
+                break;
             }
-            free(buf);
-            buf = NULL;
-            return bytes_read;
-        } else if (bytes_read == 0) {
-            free(buf);
-            buf = NULL;
-            return 0;
-        }
-
-        int32_t bytes_written = fwrite(buf, 1, bytes_read, f);
-        if (bytes_written < bytes_read) {
-            free(buf);
-            buf = NULL;
-            return -1;
-        }
+		}
     }
-    return -1;
+    
+    return result;
 }

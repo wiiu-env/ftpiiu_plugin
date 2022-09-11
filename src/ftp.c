@@ -44,7 +44,7 @@ misrepresented as being the original software.
 #define UNUSED          __attribute__((unused))
 
 #define FTP_BUFFER_SIZE 1024
-#define MAX_CLIENTS     5
+#define MAX_CLIENTS     8
 
 static const uint16_t SRC_PORT    = 20;
 static const int32_t EQUIT        = 696969;
