@@ -337,7 +337,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
             }
         }
     }
-
+	free(buf);
     return result;
 }
 
@@ -384,6 +384,6 @@ int32_t recv_to_file(int32_t s, FILE *f) {
             }
 		}
     }
-    
+    free(buf);
     return result;
 }
