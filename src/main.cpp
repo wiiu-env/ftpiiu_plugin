@@ -1,3 +1,4 @@
+#include "main.h"
 #include "BackgroundThread.hpp"
 #include "utils/logger.h"
 #include "virtualpath.h"
@@ -9,7 +10,7 @@
 
 WUPS_PLUGIN_NAME("FTPiiU");
 WUPS_PLUGIN_DESCRIPTION("FTP Server");
-WUPS_PLUGIN_VERSION("0.1");
+WUPS_PLUGIN_VERSION(VERSION_FULL_RAW);
 WUPS_PLUGIN_AUTHOR("Maschell");
 WUPS_PLUGIN_LICENSE("GPL");
 
