@@ -7,11 +7,15 @@ extern "C" {
 #endif
 
 #include "net.h"
+#include "version.h"
 #include <stdint.h>
 
-#define MAXPATHLEN      256
+#define MAXPATHLEN       256
 
-#define wiiu_geterrno() (errno)
+#define VERSION_RAW      "0.1.1"
+#define VERSION_FULL_RAW VERSION_RAW VERSION_EXTRA
+
+#define wiiu_geterrno()  (errno)
 
 //! C wrapper for our C++ functions
 int Menu_Main(void);
