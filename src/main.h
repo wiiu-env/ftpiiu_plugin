@@ -10,12 +10,14 @@ extern "C" {
 #include "version.h"
 #include <stdint.h>
 
-#define MAXPATHLEN       256
+#define MAXPATHLEN      256
 
-#define VERSION_RAW      "0.1.1"
-#define VERSION_FULL_RAW VERSION_RAW VERSION_EXTRA
+#define VERSION         "v0.1.1"
+#define VERSION_FULL    VERSION VERSION_EXTRA
 
-#define wiiu_geterrno()  (errno)
+#define wiiu_geterrno() (errno)
+
+extern bool gSystemFilesAllowed;
 
 //! C wrapper for our C++ functions
 int Menu_Main(void);

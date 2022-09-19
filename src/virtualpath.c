@@ -27,6 +27,7 @@
 * for WiiXplorer 2010
 ***************************************************************************/
 #include "virtualpath.h"
+#include "main.h"
 #include "utils/logger.h"
 #include <malloc.h>
 #include <string.h>
@@ -138,16 +139,17 @@ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix
 
 void MountVirtualDevices() {
     VirtualMountDevice("fs:/");
-    VirtualMountDevice("slccmpt01:/");
-    VirtualMountDevice("storage_odd_tickets:/");
-    VirtualMountDevice("storage_odd_updates:/");
-    VirtualMountDevice("storage_odd_content:/");
-    VirtualMountDevice("storage_odd_content2:/");
-    VirtualMountDevice("storage_slc:/");
-    VirtualMountDevice("storage_mlc:/");
-    VirtualMountDevice("storage_usb:/");
-    VirtualMountDevice("usb:/");
-
+    if (gSystemFilesAllowed) {
+        VirtualMountDevice("slccmpt01:/");
+        VirtualMountDevice("storage_odd_tickets:/");
+        VirtualMountDevice("storage_odd_updates:/");
+        VirtualMountDevice("storage_odd_content:/");
+        VirtualMountDevice("storage_odd_content2:/");
+        VirtualMountDevice("storage_slc:/");
+        VirtualMountDevice("storage_mlc:/");
+        VirtualMountDevice("storage_usb:/");
+        VirtualMountDevice("usb:/");
+    }
     AddVirtualFSPath("vol", NULL, NULL);
     AddVirtualFSVOLPath("external01", NULL, NULL);
     AddVirtualFSVOLPath("content", NULL, NULL);
