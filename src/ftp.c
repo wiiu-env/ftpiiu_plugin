@@ -228,7 +228,7 @@ static int32_t ftp_MODE(client_t *client, char *rest) {
 }
 
 static int32_t ftp_FEAT(client_t *client, char *rest) {
-    return write_reply(client, 211, "Features:\n UTF8\n211 End");
+    return write_reply(client, 211, "Features:\r\n UTF8\r\n211 End");
 }
 
 static int32_t ftp_OPTS(client_t *client, char *rest) {
