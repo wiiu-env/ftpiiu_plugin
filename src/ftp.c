@@ -112,7 +112,11 @@ static int32_t write_reply(client_t *client, uint16_t code, char *msg) {
     char *msgbuf    = (char *) malloc(msglen + 1);
     if (msgbuf == NULL)
         return -ENOMEM;
-    sprintf(msgbuf, "%u %s\r\n", code, msg);
+    if (code == 211) {
+        sprintf(msgbuf, "%u-%s\r\n", code, msg);
+    } else {
+        sprintf(msgbuf, "%u %s\r\n", code, msg);
+    }
     console_printf("Wrote reply: %s", msgbuf);
     int32_t ret = send_exact(client->socket, msgbuf, msglen);
     free(msgbuf);
@@ -220,6 +224,18 @@ static int32_t ftp_MODE(client_t *client, char *rest) {
         return write_reply(client, 200, "Mode S ok.");
     } else {
         return write_reply(client, 501, "Syntax error in parameters.");
+    }
+}
+
+static int32_t ftp_FEAT(client_t *client, char *rest) {
+    return write_reply(client, 211, "Features:\n UTF8\n211 End");
+}
+
+static int32_t ftp_OPTS(client_t *client, char *rest) {
+    if (!strcasecmp("UTF8 ON", rest)) {
+        return write_reply(client, 200, "OK");
+    } else {
+        return write_reply(client, 502, "Command not implemented.");
     }
 }
 
@@ -681,21 +697,22 @@ static int32_t ftp_UNKNOWN(client_t *client, char *rest UNUSED) {
     return write_reply(client, 502, "Command not implemented.");
 }
 
-static const char *unauthenticated_commands[]               = {"USER", "PASS", "QUIT", "REIN", "NOOP", NULL};
-static const ftp_command_handler unauthenticated_handlers[] = {ftp_USER, ftp_PASS, ftp_QUIT, ftp_REIN, ftp_NOOP, ftp_NEEDAUTH};
+static const char *unauthenticated_commands[]               = {"USER", "PASS", "QUIT", "REIN", "FEAT", "OPTS", "NOOP", NULL};
+static const ftp_command_handler unauthenticated_handlers[] = {ftp_USER, ftp_PASS, ftp_QUIT, ftp_REIN, ftp_FEAT, ftp_OPTS, ftp_NOOP, ftp_NEEDAUTH};
 
 static const char *authenticated_commands[] = {
         "USER", "PASS", "LIST", "PWD", "CWD", "CDUP",
         "SIZE", "PASV", "PORT", "TYPE", "SYST", "MODE",
         "RETR", "STOR", "APPE", "REST", "DELE", "MKD",
         "RMD", "RNFR", "RNTO", "NLST", "QUIT", "REIN",
-        "SITE", "NOOP", "ALLO", NULL};
+        "SITE", "FEAT", "OPTS", "NOOP", "ALLO", NULL};
 static const ftp_command_handler authenticated_handlers[] = {
         ftp_USER, ftp_PASS, ftp_LIST, ftp_PWD, ftp_CWD, ftp_CDUP,
         ftp_SIZE, ftp_PASV, ftp_PORT, ftp_TYPE, ftp_SYST, ftp_MODE,
         ftp_RETR, ftp_STOR, ftp_APPE, ftp_REST, ftp_DELE, ftp_MKD,
         ftp_DELE, ftp_RNFR, ftp_RNTO, ftp_NLST, ftp_QUIT, ftp_REIN,
-        ftp_SITE, ftp_NOOP, ftp_SUPERFLUOUS, ftp_UNKNOWN};
+        ftp_SITE, ftp_FEAT, ftp_OPTS, ftp_NOOP, ftp_SUPERFLUOUS,
+        ftp_UNKNOWN};
 
 /*
 	returns negative to signal an error that requires closing the connection
