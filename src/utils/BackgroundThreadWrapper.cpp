@@ -1,7 +1,7 @@
 #include "BackgroundThreadWrapper.hpp"
 #include <coreinit/cache.h>
 
-BackgroundThreadWrapper::BackgroundThreadWrapper(int32_t priority) : CThread(CThread::eAttributeAffCore2, priority, 0x100000) {
+BackgroundThreadWrapper::BackgroundThreadWrapper(int32_t priority) : CThread(CThread::eAttributeAffCore2, priority, 0x100000, nullptr, nullptr, "FTPiiU Server") {
 }
 
 BackgroundThreadWrapper::~BackgroundThreadWrapper() {
