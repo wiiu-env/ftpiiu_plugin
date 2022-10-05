@@ -103,16 +103,23 @@ public:
     virtual void shutdownThread() {
         //! wait for thread to finish
         if (pThread && !(iAttributes & eAttributeDetach)) {
-            if (isThreadSuspended())
-                resumeThread();
+            if (!isThreadTerminated()) {
+                if (isThreadSuspended()) {
+                    resumeThread();
+                }
 
-            OSJoinThread(pThread, nullptr);
+                OSJoinThread(pThread, nullptr);
+            } else {
+                DEBUG_FUNCTION_LINE_WARN("Thread \"%s\" has already been terminated!!!", pThreadName.c_str());
+            }
         }
         //! free the thread stack buffer
-        if (pThreadStack)
+        if (pThreadStack) {
             free(pThreadStack);
-        if (pThread)
+        }
+        if (pThread) {
             free(pThread);
+        }
 
         pThread      = nullptr;
         pThreadStack = nullptr;
