@@ -55,7 +55,8 @@ ON_APPLICATION_START() {
     nn::ac::GetAssignedAddress(&hostIpAddress);
     initLogging();
 
-
+    //Make sure the server instance is destroyed.
+    BackgroundThread::destroyInstance();
     if (gFTPServerEnabled) {
         startServer();
     }
@@ -225,6 +226,5 @@ WUPS_CONFIG_CLOSED() {
 
 ON_APPLICATION_REQUESTS_EXIT() {
     stopServer();
-
     deinitLogging();
 }
