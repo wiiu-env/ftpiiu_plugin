@@ -147,7 +147,7 @@ int32_t network_close(int32_t s) {
     if (s < 0) {
         return -1;
     }
-
+    shutdown(s, SHUT_RDWR);
     int res = close(s);
 
     if (res < 0) {
