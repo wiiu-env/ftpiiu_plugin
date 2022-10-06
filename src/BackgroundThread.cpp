@@ -38,8 +38,14 @@ BOOL BackgroundThread::whileLoop() {
             this->serverSocket = -1;
             DCFlushRange(&(this->serverSocket), 4);
         }
+    } else {
+        this->serverSocket = create_server(PORT);
+        if (this->serverSocket < 0) {
+            DEBUG_FUNCTION_LINE_WARN("Creating a new ftp server failed. Trying again in 5 seconds.");
+            OSSleepTicks(OSSecondsToTicks(5));
+        }
     }
     mutex.unlock();
-    OSSleepTicks(OSMillisecondsToTicks(16));
+    OSSleepTicks(OSMillisecondsToTicks(1));
     return true;
 }
