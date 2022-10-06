@@ -325,18 +325,33 @@ static int32_t ftp_SIZE(client_t *client, char *path) {
 
 static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     close_passive_socket(client);
-    client->passive_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (client->passive_socket < 0) {
-        return write_reply(client, 520, "Unable to create listening socket.");
-    }
-    set_blocking(client->passive_socket, false);
-    struct sockaddr_in bindAddress;
-    memset(&bindAddress, 0, sizeof(bindAddress));
-    bindAddress.sin_family      = AF_INET;
-    bindAddress.sin_port        = htons(passive_port++); // XXX: BUG: This will overflow eventually, with interesting results...
-    bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+
     int32_t result;
-    if ((result = network_bind(client->passive_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
+    struct sockaddr_in bindAddress;
+    while (passive_port < 5000) {
+        client->passive_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+        if (client->passive_socket < 0) {
+            return write_reply(client, 520, "Unable to create listening socket.");
+        }
+        set_blocking(client->passive_socket, false);
+
+        memset(&bindAddress, 0, sizeof(bindAddress));
+        bindAddress.sin_family      = AF_INET;
+        bindAddress.sin_port        = htons(passive_port); // XXX: BUG: This will overflow eventually, with interesting results...
+        bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+
+        passive_port++;
+
+        if ((result = network_bind(client->passive_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) >= 0) {
+            break;
+        } else {
+            close_passive_socket(client);
+        }
+    }
+    if (passive_port >= 5000) {
+        passive_port = 1024;
+    }
+    if (result < 0) {
         close_passive_socket(client);
         return write_reply(client, 520, "Unable to bind listening socket.");
     }
