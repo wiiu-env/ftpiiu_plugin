@@ -74,11 +74,32 @@ void VirtualMountDevice(const char *path) {
 void AddVirtualPath(const char *name, const char *alias, const char *prefix) {
     if (!VIRTUAL_PARTITIONS) {
         VIRTUAL_PARTITIONS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+        if (!VIRTUAL_PARTITIONS) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to allocate VIRTUAL_PARTITIONS");
+            return;
+        }
     }
 
     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_PARTITIONS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_PARTITIONS + 1));
     if (!tmp) {
-        free(VIRTUAL_PARTITIONS);
+        DEBUG_FUNCTION_LINE_ERR("Failed to reallocate VIRTUAL_PARTITIONS");
+        if (VIRTUAL_PARTITIONS) {
+            for (int i = 0; i < MAX_VIRTUAL_PARTITIONS; i++) {
+                if (VIRTUAL_PARTITIONS[i].name) {
+                    free(VIRTUAL_PARTITIONS[i].name);
+                    VIRTUAL_PARTITIONS[i].name = NULL;
+                }
+                if (VIRTUAL_PARTITIONS[i].alias) {
+                    free(VIRTUAL_PARTITIONS[i].alias);
+                    VIRTUAL_PARTITIONS[i].alias = NULL;
+                }
+                if (VIRTUAL_PARTITIONS[i].prefix) {
+                    free(VIRTUAL_PARTITIONS[i].prefix);
+                    VIRTUAL_PARTITIONS[i].prefix = NULL;
+                }
+            }
+            free(VIRTUAL_PARTITIONS);
+        }
         VIRTUAL_PARTITIONS     = NULL;
         MAX_VIRTUAL_PARTITIONS = 0;
         return;
@@ -94,18 +115,36 @@ void AddVirtualPath(const char *name, const char *alias, const char *prefix) {
     MAX_VIRTUAL_PARTITIONS++;
 }
 
-
 void AddVirtualFSPath(const char *name, const char *alias, const char *prefix) {
     if (!VIRTUAL_FS) {
         VIRTUAL_FS = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+        if (!VIRTUAL_FS) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to allocate VIRTUAL_FS");
+            return;
+        }
     }
 
     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS + 1));
     if (!tmp) {
+        DEBUG_FUNCTION_LINE_ERR("Failed to reallocate VIRTUAL_FS");
         if (VIRTUAL_FS) {
+            for (int i = 0; i < MAX_VIRTUAL_FS; i++) {
+                if (VIRTUAL_FS[i].name) {
+                    free(VIRTUAL_FS[i].name);
+                    VIRTUAL_FS[i].name = NULL;
+                }
+                if (VIRTUAL_FS[i].alias) {
+                    free(VIRTUAL_FS[i].alias);
+                    VIRTUAL_FS[i].alias = NULL;
+                }
+                if (VIRTUAL_FS[i].prefix) {
+                    free(VIRTUAL_FS[i].prefix);
+                    VIRTUAL_FS[i].prefix = NULL;
+                }
+            }
             free(VIRTUAL_FS);
-            VIRTUAL_FS = 0;
         }
+        VIRTUAL_FS     = NULL;
         MAX_VIRTUAL_FS = 0;
         return;
     }
@@ -123,11 +162,32 @@ void AddVirtualFSPath(const char *name, const char *alias, const char *prefix) {
 void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix) {
     if (!VIRTUAL_FS_VOL) {
         VIRTUAL_FS_VOL = (VIRTUAL_PARTITION *) malloc(sizeof(VIRTUAL_PARTITION));
+        if (!VIRTUAL_FS_VOL) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to allocate VIRTUAL_FS_VOL");
+            return;
+        }
     }
 
     VIRTUAL_PARTITION *tmp = realloc(VIRTUAL_FS_VOL, sizeof(VIRTUAL_PARTITION) * (MAX_VIRTUAL_FS_VOL + 1));
     if (!tmp) {
-        free(VIRTUAL_FS_VOL);
+        DEBUG_FUNCTION_LINE_ERR("Failed to reallocate VIRTUAL_FS_VOL");
+        if (VIRTUAL_FS_VOL) {
+            for (int i = 0; i < MAX_VIRTUAL_FS_VOL; i++) {
+                if (VIRTUAL_FS_VOL[i].name) {
+                    free(VIRTUAL_FS_VOL[i].name);
+                    VIRTUAL_FS_VOL[i].name = NULL;
+                }
+                if (VIRTUAL_FS_VOL[i].alias) {
+                    free(VIRTUAL_FS_VOL[i].alias);
+                    VIRTUAL_FS_VOL[i].alias = NULL;
+                }
+                if (VIRTUAL_FS_VOL[i].prefix) {
+                    free(VIRTUAL_FS_VOL[i].prefix);
+                    VIRTUAL_FS_VOL[i].prefix = NULL;
+                }
+            }
+            free(VIRTUAL_FS_VOL);
+        }
         VIRTUAL_FS_VOL     = NULL;
         MAX_VIRTUAL_FS_VOL = 0;
         return;
@@ -183,12 +243,28 @@ void UnmountVirtualPaths() {
             free(VIRTUAL_FS_VOL[i].name);
             VIRTUAL_FS_VOL[i].name = NULL;
         }
+        if (VIRTUAL_FS_VOL[i].alias) {
+            free(VIRTUAL_FS_VOL[i].alias);
+            VIRTUAL_FS_VOL[i].name = NULL;
+        }
+        if (VIRTUAL_FS_VOL[i].prefix) {
+            free(VIRTUAL_FS_VOL[i].prefix);
+            VIRTUAL_FS_VOL[i].prefix = NULL;
+        }
     }
 
     for (i = 0; i < MAX_VIRTUAL_FS; i++) {
         if (VIRTUAL_FS[i].name) {
             free(VIRTUAL_FS[i].name);
             VIRTUAL_FS[i].name = NULL;
+        }
+        if (VIRTUAL_FS[i].alias) {
+            free(VIRTUAL_FS[i].alias);
+            VIRTUAL_FS[i].name = NULL;
+        }
+        if (VIRTUAL_FS[i].prefix) {
+            free(VIRTUAL_FS[i].prefix);
+            VIRTUAL_FS[i].prefix = NULL;
         }
     }
 
