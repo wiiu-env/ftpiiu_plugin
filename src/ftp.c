@@ -958,15 +958,22 @@ recv_loop_end:
 bool process_ftp_events(int32_t server) {
     bool network_down = !process_accept_events(server);
     int client_index;
+    bool hasActiveClients = false;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
         client_t *client = clients[client_index];
         if (client) {
+            hasActiveClients = true;
             if (client->data_callback) {
                 process_data_events(client);
             } else {
                 process_control_events(client);
             }
         }
+    }
+    if (!hasActiveClients) {
+        OSSleepTicks(OSMillisecondsToTicks(100));
+    } else {
+        OSSleepTicks(OSMillisecondsToTicks(1));
     }
     return network_down;
 }
