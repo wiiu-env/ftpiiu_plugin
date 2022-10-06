@@ -56,7 +56,9 @@ ON_APPLICATION_START() {
     initLogging();
 
     //Make sure the server instance is destroyed.
-    BackgroundThread::destroyInstance();
+    // Skipping joining the thread as it's not even running at this point but still may be allocated.
+    BackgroundThread::destroyInstance(true);
+    thread = nullptr;
     if (gFTPServerEnabled) {
         startServer();
     }
