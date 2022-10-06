@@ -112,7 +112,10 @@ void AddVirtualFSPath(const char *name, const char *alias, const char *prefix) {
 
     VIRTUAL_FS = tmp;
 
-    VIRTUAL_FS[MAX_VIRTUAL_FS].name = strdup(name);
+    VIRTUAL_FS[MAX_VIRTUAL_FS].name     = strdup(name);
+    VIRTUAL_FS[MAX_VIRTUAL_FS].alias    = NULL;
+    VIRTUAL_FS[MAX_VIRTUAL_FS].prefix   = NULL;
+    VIRTUAL_FS[MAX_VIRTUAL_FS].inserted = true;
 
     MAX_VIRTUAL_FS++;
 }
@@ -132,7 +135,10 @@ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix
 
     VIRTUAL_FS_VOL = tmp;
 
-    VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].name = strdup(name);
+    VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].name     = strdup(name);
+    VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].alias    = NULL;
+    VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].prefix   = NULL;
+    VIRTUAL_FS_VOL[MAX_VIRTUAL_FS_VOL].inserted = true;
 
     MAX_VIRTUAL_FS_VOL++;
 }
