@@ -21,7 +21,6 @@ BackgroundThread::~BackgroundThread() {
     mutex.lock();
     if (this->serverSocket >= 0) {
         cleanup_ftp();
-        ::shutdown(this->serverSocket, SHUT_WR);
         network_close(this->serverSocket);
         this->serverSocket = -1;
     }
