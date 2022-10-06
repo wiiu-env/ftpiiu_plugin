@@ -11,7 +11,7 @@ public:
     static BackgroundThread *getInstance() {
         if (instance == nullptr) {
             instance = new BackgroundThread();
-            DCFlushRange(&instance, 4);
+            OSMemoryBarrier();
         }
         return instance;
     }
@@ -20,14 +20,8 @@ public:
         if (instance != nullptr) {
             delete instance;
             instance = nullptr;
-            DCFlushRange(&instance, 4);
+            OSMemoryBarrier();
         }
-    }
-    static void destroyInstance(bool forceKill) {
-        if (instance != nullptr) {
-            instance->skipJoin = true;
-        }
-        destroyInstance();
     }
 
     BackgroundThread();

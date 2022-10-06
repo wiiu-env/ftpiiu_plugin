@@ -19,8 +19,6 @@ protected:
         CThread::setThreadPriority(priority);
     }
 
-    std::recursive_mutex mutex;
-
 private:
     void executeThread() override;
 
