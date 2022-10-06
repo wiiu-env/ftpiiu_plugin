@@ -42,6 +42,5 @@ BOOL BackgroundThread::whileLoop() {
             OSSleepTicks(OSSecondsToTicks(5));
         }
     }
-    OSSleepTicks(OSMillisecondsToTicks(1));
     return true;
 }
