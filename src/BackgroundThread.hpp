@@ -23,6 +23,12 @@ public:
             DCFlushRange(&instance, 4);
         }
     }
+    static void destroyInstance(bool forceKill) {
+        if (instance != nullptr) {
+            instance->skipJoin = true;
+        }
+        destroyInstance();
+    }
 
     BackgroundThread();
 
