@@ -226,7 +226,7 @@ WUPS_CONFIG_CLOSED() {
     }
 }
 
-ON_APPLICATION_REQUESTS_EXIT() {
+ON_APPLICATION_ENDS() {
     stopServer();
     deinitLogging();
 }
