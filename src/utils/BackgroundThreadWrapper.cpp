@@ -6,7 +6,7 @@ BackgroundThreadWrapper::BackgroundThreadWrapper(int32_t priority) : CThread(CTh
 
 BackgroundThreadWrapper::~BackgroundThreadWrapper() {
     exitThread = 1;
-    DCFlushRange((void *) &exitThread, 4);
+    OSMemoryBarrier();
 }
 
 void BackgroundThreadWrapper::executeThread() {
