@@ -7,7 +7,6 @@ BackgroundThread *BackgroundThread::instance = nullptr;
 
 BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread::getPriority()) {
     DEBUG_FUNCTION_LINE("Start FTP Server");
-    std::lock_guard<std::recursive_mutex> lock(mutex);
     this->serverSocket = create_server(PORT);
     OSMemoryBarrier();
     DEBUG_FUNCTION_LINE_VERBOSE("Resume Thread");
@@ -16,7 +15,6 @@ BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread:
 
 BackgroundThread::~BackgroundThread() {
     DEBUG_FUNCTION_LINE("Shutting down FTP Server");
-    std::lock_guard<std::recursive_mutex> lock(mutex);
     if (this->serverSocket >= 0) {
         cleanup_ftp();
         network_close(this->serverSocket);
@@ -25,15 +23,14 @@ BackgroundThread::~BackgroundThread() {
 }
 
 BOOL BackgroundThread::whileLoop() {
-    std::lock_guard<std::recursive_mutex> lock(mutex);
     if (this->serverSocket >= 0) {
         network_down = process_ftp_events(this->serverSocket);
         if (network_down) {
-            DEBUG_FUNCTION_LINE_VERBOSE("Network is down %d", this->serverSocket);
+            DEBUG_FUNCTION_LINE_WARN("Network is down");
             cleanup_ftp();
             network_close(this->serverSocket);
             this->serverSocket = -1;
-            DCFlushRange(&(this->serverSocket), 4);
+            OSMemoryBarrier();
         }
     } else {
         this->serverSocket = create_server(PORT);

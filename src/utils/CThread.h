@@ -101,22 +101,15 @@ public:
 
     //! Shutdown thread
     virtual void shutdownThread() {
-        if (skipJoin) {
-            DEBUG_FUNCTION_LINE_WARN("Skip joining the thread \"%s\", it's not running.", pThreadName.c_str());
-        } else {
-            //! wait for thread to finish
-            if (pThread && !(iAttributes & eAttributeDetach)) {
-                if (!isThreadTerminated()) {
-                    if (isThreadSuspended()) {
-                        resumeThread();
-                    }
-
-                    OSJoinThread(pThread, nullptr);
-                } else {
-                    DEBUG_FUNCTION_LINE_WARN("Thread \"%s\" has already been terminated!!!", pThreadName.c_str());
-                }
+        //! wait for thread to finish
+        if (pThread && !(iAttributes & eAttributeDetach)) {
+            if (isThreadSuspended()) {
+                resumeThread();
             }
+
+            OSJoinThread(pThread, nullptr);
         }
+
         //! free the thread stack buffer
         if (pThreadStack) {
             free(pThreadStack);
@@ -138,8 +131,6 @@ public:
         eAttributeDetach    = 0x08,
         eAttributePinnedAff = 0x10
     };
-
-    bool skipJoin = false;
 
 private:
     static int threadCallback(int argc, const char **argv) {
