@@ -35,7 +35,7 @@ misrepresented as being the original software.
 
 #define MAX_NET_BUFFER_SIZE (128 * 1024)
 #define MIN_NET_BUFFER_SIZE 4096
-#define FREAD_BUFFER_SIZE   (128 * 1024)
+#define IO_BUFFER_SIZE      (128 * 1024)
 
 extern uint32_t hostIpAddress;
 
@@ -234,20 +234,20 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
+    char *buf = (char *) memalign(0x40, IO_BUFFER_SIZE);
     if (!buf)
         return -1;
 
     int32_t bytes_read;
     int32_t result = 0;
 
-    bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
+    bytes_read = fread(buf, 1, IO_BUFFER_SIZE, f);
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
         if (result < 0)
             goto end;
     }
-    if (bytes_read < FREAD_BUFFER_SIZE) {
+    if (bytes_read < IO_BUFFER_SIZE) {
         result = -!feof(f);
         goto end;
     }
@@ -265,11 +265,17 @@ int32_t recv_to_file(int32_t s, FILE *f) {
     if (!buf)
         return -1;
 
+    setvbuf(f, NULL, _IOFBF, IO_BUFFER_SIZE);
+
     int32_t bytes_read;
     while (1) {
     try_again_with_smaller_buffer:
         bytes_read = network_read(s, buf, NET_BUFFER_SIZE);
         if (bytes_read < 0) {
+            if (bytes_read == -EAGAIN) {
+                usleep(1000);
+                continue;
+            }
             if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
                 NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
                 usleep(1000);
