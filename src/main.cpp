@@ -27,8 +27,9 @@ BackgroundThread *thread = nullptr;
 #define FTPIIU_ENABLED_STRING       "enabled"
 #define SYSTEM_FILES_ALLOWED_STRING "systemFilesAllowed"
 
-bool gFTPServerEnabled   = true;
-bool gSystemFilesAllowed = false;
+bool gFTPServerEnabled      = true;
+bool gSystemFilesAllowed    = false;
+bool gMochaPathsWereMounted = false;
 
 MochaUtilsStatus MountWrapper(const char *mount, const char *dev, const char *mountTo) {
     auto res = Mocha_MountFS(mount, dev, mountTo);
@@ -107,6 +108,7 @@ void startServer() {
                 MountWrapper("storage_slc", "/dev/slc01", "/vol/storage_slc01");
                 Mocha_MountFS("storage_mlc", nullptr, "/vol/storage_mlc01");
                 Mocha_MountFS("storage_usb", nullptr, "/vol/storage_usb01");
+                gMochaPathsWereMounted = true;
             } else {
                 DEBUG_FUNCTION_LINE_ERR("Failed to init libmocha: %s [%d]", Mocha_GetStatusStr(res), res);
             }
@@ -122,7 +124,7 @@ void startServer() {
 
 void stopServer() {
     BackgroundThread::destroyInstance();
-    if (gSystemFilesAllowed) {
+    if (gMochaPathsWereMounted) {
         Mocha_UnmountFS("slccmpt01");
         Mocha_UnmountFS("storage_odd_tickets");
         Mocha_UnmountFS("storage_odd_updates");
@@ -131,6 +133,7 @@ void stopServer() {
         Mocha_UnmountFS("storage_slc");
         Mocha_UnmountFS("storage_mlc");
         Mocha_UnmountFS("storage_usb");
+        gMochaPathsWereMounted = false;
     }
 
     DEBUG_FUNCTION_LINE("Unmount virtual paths");
