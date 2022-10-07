@@ -30,7 +30,7 @@ public:
 
 private:
     static int32_t getPriority() {
-        return 17;
+        return 16;
     }
 
     BOOL whileLoop() override;
