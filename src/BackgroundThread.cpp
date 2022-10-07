@@ -35,8 +35,10 @@ BOOL BackgroundThread::whileLoop() {
     } else {
         this->serverSocket = create_server(PORT);
         if (this->serverSocket < 0) {
-            DEBUG_FUNCTION_LINE_WARN("Creating a new ftp server failed. Trying again in 5 seconds.");
-            OSSleepTicks(OSSecondsToTicks(5));
+            if (errno != EBUSY) {
+                DEBUG_FUNCTION_LINE_WARN("Creating server failed: %d", errno);
+            }
+            OSSleepTicks(OSMillisecondsToTicks(10));
         }
     }
     return true;
