@@ -6,6 +6,7 @@ BackgroundThreadWrapper::BackgroundThreadWrapper(int32_t priority) : CThread(CTh
 
 BackgroundThreadWrapper::~BackgroundThreadWrapper() {
     exitThread = 1;
+    stopThread();
     OSMemoryBarrier();
 }
 
@@ -18,4 +19,6 @@ void BackgroundThreadWrapper::executeThread() {
             break;
         }
     }
+    threadEnded = true;
+    OSMemoryBarrier();
 }

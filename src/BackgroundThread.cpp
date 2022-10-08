@@ -15,6 +15,10 @@ BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread:
 
 BackgroundThread::~BackgroundThread() {
     DEBUG_FUNCTION_LINE("Shutting down FTP Server");
+    stopThread();
+    while (!hasThreadStopped()) {
+        OSSleepTicks(OSMillisecondsToTicks(10));
+    }
     if (this->serverSocket >= 0) {
         cleanup_ftp();
         network_close(this->serverSocket);
