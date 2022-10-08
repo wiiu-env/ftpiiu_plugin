@@ -579,7 +579,11 @@ static int32_t stor_or_append(client_t *client, FILE *f) {
 }
 
 static int32_t ftp_STOR(client_t *client, char *path) {
-    FILE *f = vrt_fopen(client->cwd, path, "wb");
+    char *openMode = "wb";
+    if (client->restart_marker) {
+        openMode = "r+";
+    }
+    FILE *f = vrt_fopen(client->cwd, path, openMode);
     int fd;
     if (f) {
         fd = fileno(f);
