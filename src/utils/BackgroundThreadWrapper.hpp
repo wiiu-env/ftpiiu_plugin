@@ -12,17 +12,26 @@ public:
 
 protected:
     [[nodiscard]] BOOL shouldExit() const {
-        return (exitThread == 1);
+        return (exitThread);
     }
 
     void setThreadPriority(int32_t priority) override {
         CThread::setThreadPriority(priority);
     }
 
+    void stopThread() {
+        exitThread = true;
+    }
+
+    bool hasThreadStopped() {
+        return threadEnded;
+    }
+
 private:
+    volatile bool threadEnded = false;
+    volatile bool exitThread  = false;
+
     void executeThread() override;
 
     virtual BOOL whileLoop() = 0;
-
-    volatile int32_t exitThread = 0;
 };
