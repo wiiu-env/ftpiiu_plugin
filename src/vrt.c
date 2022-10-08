@@ -410,8 +410,7 @@ int vrt_closedir(DIR_P *iter) {
         }
     }
 
-    // root path is not allocated
-    if (iter->path && *iter->path != 0) {
+    if (iter->path) {
         free(iter->path);
         iter->path = NULL;
     }
