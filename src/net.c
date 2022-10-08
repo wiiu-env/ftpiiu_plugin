@@ -22,6 +22,7 @@ misrepresented as being the original software.
 
 */
 #include "main.h"
+#include <coreinit/thread.h>
 #include <malloc.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -33,13 +34,11 @@ misrepresented as being the original software.
 
 #include "net.h"
 
-#define MAX_NET_BUFFER_SIZE (128 * 1024)
-#define MIN_NET_BUFFER_SIZE 4096
-#define FREAD_BUFFER_SIZE   (128 * 1024)
+#define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
+#define IO_BUFFER_SIZE          (512 * 1024)
+#define MIN_NET_BUFFER_SIZE     (4 * 1024)
 
 extern uint32_t hostIpAddress;
-
-static uint32_t NET_BUFFER_SIZE = MAX_NET_BUFFER_SIZE;
 
 #if 0
 void initialise_network() {
@@ -72,6 +71,11 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     if (sock < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : sock;
+    }
+    if (type == SOCK_STREAM) {
+        int enable = 1;
+        // Activate WinScale
+        setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
     }
     return sock;
 }
@@ -206,17 +210,23 @@ static int32_t transfer_exact(int32_t s, char *buf, int32_t length, transferrer_
     int32_t remaining = length;
     int32_t bytes_transferred;
     set_blocking(s, true);
+    uint32_t curNetBufferSize = DEFAULT_NET_BUFFER_SIZE;
+
     while (remaining) {
     try_again_with_smaller_buffer:
-        bytes_transferred = transferrer(s, buf, MIN(remaining, (int) NET_BUFFER_SIZE));
+        bytes_transferred = transferrer(s, buf, MIN(remaining, (int) DEFAULT_NET_BUFFER_SIZE));
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
         } else if (bytes_transferred < 0) {
-            if (bytes_transferred == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
-                usleep(1000);
+            if (bytes_transferred == -EINVAL && curNetBufferSize == DEFAULT_NET_BUFFER_SIZE) {
+                curNetBufferSize = MIN_NET_BUFFER_SIZE;
+                OSSleepTicks(OSMillisecondsToTicks(1));
                 goto try_again_with_smaller_buffer;
+            }
+            if (bytes_transferred == -EAGAIN) {
+                OSSleepTicks(OSMillisecondsToTicks(1));
+                continue;
             }
             result = bytes_transferred;
             break;
@@ -234,20 +244,24 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, FREAD_BUFFER_SIZE);
-    if (!buf)
+    char *buf = (char *) memalign(0x40, IO_BUFFER_SIZE);
+    if (!buf) {
         return -1;
+    }
 
     int32_t bytes_read;
     int32_t result = 0;
 
-    bytes_read = fread(buf, 1, FREAD_BUFFER_SIZE, f);
+    int bufSize = DEFAULT_NET_BUFFER_SIZE;
+    setsockopt(s, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
+
+    bytes_read = fread(buf, 1, IO_BUFFER_SIZE, f);
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
         if (result < 0)
             goto end;
     }
-    if (bytes_read < FREAD_BUFFER_SIZE) {
+    if (bytes_read < IO_BUFFER_SIZE) {
         result = -!feof(f);
         goto end;
     }
@@ -261,19 +275,33 @@ end:
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, NET_BUFFER_SIZE);
-    if (!buf)
+    char *buf = (char *) memalign(0x40, DEFAULT_NET_BUFFER_SIZE);
+    if (!buf) {
         return -1;
+    }
+
+    // Not perfect because it's not aligned, but with the way fclose is called
+    // using a custom buffer is annoying to clean up properly
+    setvbuf(f, NULL, _IOFBF, IO_BUFFER_SIZE);
+
+    int bufSize = DEFAULT_NET_BUFFER_SIZE;
+    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
+
+    uint32_t curNetBufferSize = DEFAULT_NET_BUFFER_SIZE;
 
     int32_t bytes_read;
     while (1) {
     try_again_with_smaller_buffer:
-        bytes_read = network_read(s, buf, NET_BUFFER_SIZE);
+        bytes_read = network_read(s, buf, curNetBufferSize);
         if (bytes_read < 0) {
-            if (bytes_read == -EINVAL && NET_BUFFER_SIZE == MAX_NET_BUFFER_SIZE) {
-                NET_BUFFER_SIZE = MIN_NET_BUFFER_SIZE;
-                usleep(1000);
+            if (bytes_read == -EINVAL && curNetBufferSize == DEFAULT_NET_BUFFER_SIZE) {
+                curNetBufferSize = MIN_NET_BUFFER_SIZE;
+                OSSleepTicks(OSMillisecondsToTicks(1));
                 goto try_again_with_smaller_buffer;
+            }
+            if (bytes_read == -EAGAIN) {
+                OSSleepTicks(OSMillisecondsToTicks(1));
+                continue;
             }
             free(buf);
             buf = NULL;

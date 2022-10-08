@@ -121,7 +121,6 @@ void startServer() {
     }
 }
 
-
 void stopServer() {
     BackgroundThread::destroyInstance();
     if (gMochaPathsWereMounted) {
