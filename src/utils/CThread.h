@@ -89,7 +89,7 @@ public:
     }
 
     //! Check if thread is terminated
-    [[nodiscard]] virtual BOOL isThreadTerminated() const {
+    [[nodiscard]] BOOL isThreadTerminated() const {
         if (pThread) return OSIsThreadTerminated(pThread);
         return false;
     }
