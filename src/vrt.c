@@ -402,7 +402,7 @@ int vrt_closedir(DIR_P *iter) {
     if (!iter) return -1;
 
     if (iter->dir) {
-        if (iter->virt_root) {
+        if (iter->virt_root || iter->virtual_fs || iter->virtual_fs_vol) {
             free(iter->dir);
             iter->dir = NULL;
         } else {
