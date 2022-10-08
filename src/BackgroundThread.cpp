@@ -14,10 +14,14 @@ BackgroundThread::BackgroundThread() : BackgroundThreadWrapper(BackgroundThread:
 }
 
 BackgroundThread::~BackgroundThread() {
-    DEBUG_FUNCTION_LINE("Shutting down FTP Server");
-    stopThread();
-    while (!hasThreadStopped()) {
-        OSSleepTicks(OSMillisecondsToTicks(10));
+    if (!isThreadTerminated()) {
+        DEBUG_FUNCTION_LINE("Shutting down FTP Server");
+        stopThread();
+        while (!hasThreadStopped()) {
+            OSSleepTicks(OSMillisecondsToTicks(10));
+        }
+    } else {
+        DEBUG_FUNCTION_LINE_WARN("Thread is already terminated");
     }
     if (this->serverSocket >= 0) {
         cleanup_ftp();
