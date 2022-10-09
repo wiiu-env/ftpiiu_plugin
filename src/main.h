@@ -12,7 +12,7 @@ extern "C" {
 
 #define MAXPATHLEN      256
 
-#define VERSION         "v0.2"
+#define VERSION         "v0.3"
 #define VERSION_FULL    VERSION VERSION_EXTRA
 
 #define wiiu_geterrno() (errno)
