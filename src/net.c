@@ -38,6 +38,9 @@ misrepresented as being the original software.
 #define IO_BUFFER_SIZE          (512 * 1024)
 #define MIN_NET_BUFFER_SIZE     (4 * 1024)
 
+// buffer for upload operations : 2*512*1024 ~ 1MB
+#define UL_BUFFER_SIZE (2*IO_BUFFER_SIZE)
+
 extern uint32_t hostIpAddress;
 
 #if 0
@@ -123,6 +126,37 @@ int32_t network_read(int32_t s, void *mem, int32_t len) {
         return (err < 0) ? err : res;
     }
     return res;
+}
+
+// read from network by chunk (len long)
+static int32_t network_readChunk(int32_t s, void *mem, int32_t len) {
+
+    int32_t received = 0;
+    int ret = -1;
+
+    // while buffer is not full (len>0)
+    while (len>0)
+    {
+        // max ret value is 2*setsockopt value on SO_RCVBUF
+        ret = recv(s, mem, len, 0);        
+        if (ret == 0) {
+            // client EOF detected
+            break;
+        } else if (ret < 0 && wiiu_geterrno() != EAGAIN) {
+            int err = -wiiu_geterrno();
+            received = (err < 0) ? err : ret;
+            break;
+        } else {
+            if (ret > 0) {
+                received += ret;
+                len -= ret;
+                mem += ret;
+            }
+        }
+    }
+    // here len could be < 0 and so more than len bytes are read
+    // received > len and mem up to date
+    return received;
 }
 
 uint32_t network_gethostip() {
@@ -252,6 +286,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
     int32_t bytes_read;
     int32_t result = 0;
 
+    // (the system double the value set) = IO_BUFFER_SIZE
     int bufSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
 
@@ -275,49 +310,59 @@ end:
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, DEFAULT_NET_BUFFER_SIZE);
+    // return code
+    int32_t result = 0;
+
+    // (the system double the value set) = IO_BUFFER_SIZE
+    int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
+    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
+
+	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes
+	// use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
+	
+	// need UL_BUFFER_SIZE >= 4*DEFAULT_NET_BUFFER_SIZE	
+    char *buf = (char *) memalign(0x40, UL_BUFFER_SIZE);
     if (!buf) {
         return -1;
     }
+	
+	// size of the network read chunk
+ 	uint32_t chunckSize = UL_BUFFER_SIZE - (rcvBuffSize*2);
+
 
     // Not perfect because it's not aligned, but with the way fclose is called
     // using a custom buffer is annoying to clean up properly
-    setvbuf(f, NULL, _IOFBF, IO_BUFFER_SIZE);
+    setvbuf(f, NULL, _IOFBF, chunckSize);
 
-    int bufSize = DEFAULT_NET_BUFFER_SIZE;
-    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
+    int32_t bytes_read = chunckSize;
+    while (bytes_read) {
+    try_again:
+        bytes_read = network_readChunk(s, buf, chunckSize);
+        if (bytes_read == 0) {
+			result = 0;
+			break;
+		} else if (bytes_read < 0) {
 
-    uint32_t curNetBufferSize = DEFAULT_NET_BUFFER_SIZE;
-
-    int32_t bytes_read;
-    while (1) {
-    try_again_with_smaller_buffer:
-        bytes_read = network_read(s, buf, curNetBufferSize);
-        if (bytes_read < 0) {
-            if (bytes_read == -EINVAL && curNetBufferSize == DEFAULT_NET_BUFFER_SIZE) {
-                curNetBufferSize = MIN_NET_BUFFER_SIZE;
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                goto try_again_with_smaller_buffer;
+            if (bytes_read == -EINVAL) {
+                 OSSleepTicks(OSMillisecondsToTicks(1));
+                goto try_again;
             }
-            if (bytes_read == -EAGAIN) {
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                continue;
+			result = bytes_read;
+            break;
+        } else {
+            // bytes_received > 0
+ 
+            // write bytes_received to f
+            result = fwrite(buf, 1, bytes_read, f);
+            if ((result < 0 && result < bytes_read) || ferror(f) != 0) {
+                // error when writing f
+                result = -100;
+                break;
             }
-            free(buf);
-            buf = NULL;
-            return bytes_read;
-        } else if (bytes_read == 0) {
-            free(buf);
-            buf = NULL;
-            return 0;
-        }
-
-        int32_t bytes_written = fwrite(buf, 1, bytes_read, f);
-        if (bytes_written < bytes_read) {
-            free(buf);
-            buf = NULL;
-            return -1;
-        }
-    }
-    return -1;
+ 		}
+	}
+	free(buf);
+	buf = NULL;
+	
+	return result;
 }
