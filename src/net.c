@@ -286,7 +286,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
     int32_t bytes_read;
     int32_t result = 0;
 
-    // (the system double the value set) = IO_BUFFER_SIZE
+    // (the system double the value set)
     int bufSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
 
@@ -313,14 +313,13 @@ int32_t recv_to_file(int32_t s, FILE *f) {
     // return code
     int32_t result = 0;
 
-    // (the system double the value set) = IO_BUFFER_SIZE
+    // (the system double the value set)
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
-	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes
-	// use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
-	
-	// need UL_BUFFER_SIZE >= 4*DEFAULT_NET_BUFFER_SIZE	
+    // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
+    // use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
+    // need UL_BUFFER_SIZE >= 2*DEFAULT_NET_BUFFER_SIZE	
     char *buf = (char *) memalign(0x40, UL_BUFFER_SIZE);
     if (!buf) {
         return -1;
