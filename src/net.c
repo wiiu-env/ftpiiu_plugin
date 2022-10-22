@@ -35,11 +35,7 @@ misrepresented as being the original software.
 #include "net.h"
 
 #define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
-#define IO_BUFFER_SIZE          (512 * 1024)
 #define MIN_NET_BUFFER_SIZE     (4 * 1024)
-
-// buffer for upload operations : 2*512*1024 ~ 1MB
-#define UL_BUFFER_SIZE (2*IO_BUFFER_SIZE)
 
 extern uint32_t hostIpAddress;
 
@@ -278,11 +274,6 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, IO_BUFFER_SIZE);
-    if (!buf) {
-        return -1;
-    }
-
     int32_t bytes_read;
     int32_t result = 0;
 
@@ -290,13 +281,20 @@ int32_t send_from_file(int32_t s, FILE *f) {
     int bufSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
 
-    bytes_read = fread(buf, 1, IO_BUFFER_SIZE, f);
+	int dlBuffer = 2*bufSize;
+    char *buf = (char *) memalign(0x40, dlBuffer);
+    if (!buf) {
+        return -1;
+    }
+
+
+    bytes_read = fread(buf, 1, dlBuffer, f);
     if (bytes_read > 0) {
         result = send_exact(s, buf, bytes_read);
         if (result < 0)
             goto end;
     }
-    if (bytes_read < IO_BUFFER_SIZE) {
+    if (bytes_read < dlBuffer) {
         result = -!feof(f);
         goto end;
     }
@@ -317,16 +315,16 @@ int32_t recv_to_file(int32_t s, FILE *f) {
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
-    // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
-    // use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
-    // need UL_BUFFER_SIZE >= 2*DEFAULT_NET_BUFFER_SIZE	
-    char *buf = (char *) memalign(0x40, UL_BUFFER_SIZE);
+	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes
+	// use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
+	int ulBuffer = 2*DEFAULT_NET_BUFFER_SIZE;	
+    char *buf = (char *) memalign(0x40, ulBuffer);
     if (!buf) {
         return -1;
     }
 	
-	// size of the network read chunk
- 	uint32_t chunckSize = UL_BUFFER_SIZE - (rcvBuffSize*2);
+	// size of the network read chunk = ulBuffer - (rcvBuffSize*2)
+ 	uint32_t chunckSize = DEFAULT_NET_BUFFER_SIZE;
 
 
     // Not perfect because it's not aligned, but with the way fclose is called
