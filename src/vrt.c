@@ -254,7 +254,7 @@ int vrt_stat(char *cwd, char *path, struct stat *st) {
     return (int) with_virtual_path(cwd, stat, path, -1, st, NULL);
 }
 
-static int vrt_checkdir(char *cwd, char *path) {
+int vrt_checkdir(char *cwd, char *path) {
     char *real_path = to_real_path(cwd, path);
     if (!real_path) {
         return -1;

@@ -134,7 +134,7 @@ static int32_t network_readChunk(int32_t s, void *mem, int32_t len) {
     while (len>0)
     {
         // max ret value is 2*setsockopt value on SO_RCVBUF
-        ret = recv(s, mem, len, 0);        
+        ret = recv(s, mem, len, 0);
         if (ret == 0) {
             // client EOF detected
             break;
@@ -181,9 +181,8 @@ int32_t network_close(int32_t s) {
     if (s < 0) {
         return -1;
     }
-    shutdown(s, SHUT_RDWR);
     int res = close(s);
-
+    shutdown(s, SHUT_RDWR);
     if (res < 0) {
         int err = -wiiu_geterrno();
         return (err < 0) ? err : res;
@@ -274,7 +273,6 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    int32_t bytes_read;
     int32_t result = 0;
 
     // (the system double the value set)
@@ -284,24 +282,40 @@ int32_t send_from_file(int32_t s, FILE *f) {
 	int dlBuffer = 2*bufSize;
     char *buf = (char *) memalign(0x40, dlBuffer);
     if (!buf) {
-        return -1;
+        return -ENOMEM;
     }
+       
+    int32_t bytes_read = dlBuffer;        
+	while (bytes_read) {
 
-
-    bytes_read = fread(buf, 1, dlBuffer, f);
-    if (bytes_read > 0) {
-        result = send_exact(s, buf, bytes_read);
-        if (result < 0)
-            goto end;
+	    bytes_read = fread(buf, 1, dlBuffer, f);
+        if (bytes_read == 0) {
+            // SUCCESS, no more to write                  
+            result = 0;
+            break;
+        }        
+	    if (bytes_read > 0) {
+	        result = send_exact(s, buf, bytes_read);
+	        if (result < 0)
+	            break;
+	    }
+        if (result >=0) {
+            // check bytes read (now because on the last sending, data is already sent here = result)
+            if (bytes_read < dlBuffer) {
+                    
+            	if (bytes_read < 0 || feof(f) == 0 || ferror(f) != 0) {
+                    result = -3;
+                    break;
+                }
+            }
+            
+            // result = 0 and EOF
+            if ((feof(f) != 0) && (result == 0)) {
+                // SUCESS : eof file, last data bloc sent
+                break;
+            }
+        }
     }
-    if (bytes_read < dlBuffer) {
-        result = -!feof(f);
-        goto end;
-    }
-    free(buf);
-    buf = NULL;
-    return -EAGAIN;
-end:
     free(buf);
     buf = NULL;
     return result;
@@ -315,14 +329,14 @@ int32_t recv_to_file(int32_t s, FILE *f) {
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
-	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes
-	// use a buffer size >= 2*(rcvBuffSize*2) to handle the overflow
-	int ulBuffer = 2*DEFAULT_NET_BUFFER_SIZE;	
+	// network_readChunk can overflow but less than (rcvBuffSize*2) bytes = size of SO_RCVBUF
+	// use a buffer size >= rcvBuffSize*2 to handle the overflow
+	int ulBuffer = 2*rcvBuffSize;	
     char *buf = (char *) memalign(0x40, ulBuffer);
     if (!buf) {
-        return -1;
+        return -ENOMEM;
     }
-	
+
 	// size of the network read chunk = ulBuffer - (rcvBuffSize*2)
  	uint32_t chunckSize = DEFAULT_NET_BUFFER_SIZE;
 
@@ -348,7 +362,7 @@ int32_t recv_to_file(int32_t s, FILE *f) {
             break;
         } else {
             // bytes_received > 0
- 
+
             // write bytes_received to f
             result = fwrite(buf, 1, bytes_read, f);
             if ((result < 0 && result < bytes_read) || ferror(f) != 0) {
@@ -360,6 +374,6 @@ int32_t recv_to_file(int32_t s, FILE *f) {
 	}
 	free(buf);
 	buf = NULL;
-	
+
 	return result;
 }

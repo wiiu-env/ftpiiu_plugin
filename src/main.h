@@ -10,9 +10,7 @@ extern "C" {
 #include "version.h"
 #include <stdint.h>
 
-#define MAXPATHLEN      256
-
-#define VERSION         "v0.3"
+#define VERSION         "v0.4b"
 #define VERSION_FULL    VERSION VERSION_EXTRA
 
 #define wiiu_geterrno() (errno)

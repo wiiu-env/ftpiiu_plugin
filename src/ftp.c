@@ -44,7 +44,9 @@ misrepresented as being the original software.
 #define UNUSED          __attribute__((unused))
 
 #define FTP_BUFFER_SIZE 1024
-#define MAX_CLIENTS     5
+// network allowed 8 simultaneuous connections max (before  getting errors)
+// 8 transfers + 1 browsing connection = 9
+#define MAX_CLIENTS     9
 
 static const uint16_t SRC_PORT    = 20;
 static const int32_t EQUIT        = 696969;
@@ -214,8 +216,8 @@ static int32_t ftp_TYPE(client_t *client, char *rest) {
     } else {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    char msg[15];
-    snprintf(msg, sizeof(msg), "Type set to %s.", representation_type);
+    char msg[FTP_BUFFER_SIZE+13] = "";
+    sprintf(msg, "Type set to %s.", representation_type);
     return write_reply(client, 200, msg);
 }
 
@@ -238,95 +240,383 @@ static int32_t ftp_OPTS(client_t *client, char *rest) {
         return write_reply(client, 502, "Command not implemented.");
     }
 }
+// The three methods bellow are created to extand the FTP client support
+// client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
+// those functions are used to provide a same result for all clients 
+// 
+// client->cwd is the folder containing path and path is a file or folder name
+// 
+static void removeTrailingSlash(char **cwd) {
+    if (strcmp(*cwd, ".") == 0) strcpy(*cwd, "/");
+    else {
+        if ( (strlen(*cwd) > 0) && (strcmp(*cwd, "/") != 0) ) {
+            char *path = (char *)malloc (strlen(*cwd)+1);
+            strcpy(path, *cwd);
+            char *pos = strrchr(path, '/');
+            if (strcmp(pos,"/") == 0) {
+                // folder is allocated by strndup
+                char *folder = strndup(*cwd, strlen(path)-strlen(pos));
+                // update cwd
+                strcpy (*cwd, folder);
+                free(folder);
+            }
+            free(path);
+        }
+    }
+}
 
+// caller must free the returned string
+static char* getLastItemOfPath(char *cwd) {
+    char *final = NULL;
+    if ( (strlen(cwd) > 0) && (strcmp(cwd, "/") != 0) ) {
+        char *path = (char *)malloc (strlen(cwd)+1);
+        strcpy(path, cwd);
+        char *pos = strrchr(path, '/');
+        // final is allocated by strdup
+        final = strdup(pos+1);
+        free(path);
+    }
+    return final;
+}
+
+// caller must free folder and fileName strings
+static void secureAndSplitPath(char *cwd, char* path, char **folder, char **fileName) {
+
+    *fileName = NULL;
+    *folder = NULL;
+    char *pos = NULL;
+
+    if ( (strcmp(cwd, "/") == 0) && (path &&((strcmp(path, ".") == 0) || (strcmp(path, "/") == 0))) ) {
+
+        // allocate and copy folder with cwd
+        *folder = (char *)malloc (strlen(cwd)+1);
+        strcpy(*folder, cwd);
+
+        // allocate and copy fileName with .
+        *fileName = (char *)malloc (strlen(path)+1);
+        strcpy(*fileName, ".");
+
+    } else {
+
+        char *cwdNoSlash = NULL;
+        // allocate and copy fileName with path
+        cwdNoSlash = (char *)malloc (strlen(cwd)+1);
+        strcpy(cwdNoSlash, cwd);
+
+        // remove any trailing slash when cwd != "/"
+        removeTrailingSlash(&cwdNoSlash);
+
+        // cyberduck support
+        if (path) {
+            // path is given
+
+            // if first char is a slash
+            if ((path[0] == '/') && (strlen(path) > 1)) {
+                // path gives the whole full path
+
+                // get the folder from path
+                *fileName = getLastItemOfPath(path);
+                pos = strrchr(path, '/');
+                // folder is allocated by strndup
+                *folder = strndup(path, strlen(path)-strlen(pos));
+
+            } else {
+
+                if (strlen(path) > 1) {
+
+                    // path gives file's name
+
+                    // check if cwd contains path (cyberduck)
+                    if (strstr(cwdNoSlash, path) != NULL) {
+                        // remove file's name from the path
+
+                        // get the fileName from cwd
+                        *fileName = getLastItemOfPath(cwdNoSlash);
+                        pos = strrchr(cwdNoSlash, '/');
+                        // folder is allocated by strndup
+                        *folder = strndup(cwdNoSlash, strlen(cwdNoSlash)-strlen(pos));
+
+                        // update cwd
+                        strcpy(cwd, *folder);
+                        strcat(cwd, "/");
+
+                    } else {
+
+                        if ( strcmp(cwdNoSlash,"") != 0 ) {
+
+                            // allocate and copy fileName with path
+                            *fileName = (char *)malloc (strlen(path)+1);
+                            strcpy(*fileName, path);
+                            // allocate and copy folder with cwd
+                            *folder = (char *)malloc (strlen(cwdNoSlash)+1);
+                            strcpy(*folder, cwdNoSlash);
+
+                        } else {
+
+                            // get the folder from path
+                            *fileName = getLastItemOfPath(path);
+                            pos = strrchr(path, '/');
+                            // folder is allocated by strndup
+                            *folder = strndup(path, strlen(path)-strlen(pos));
+
+                            // update cwd
+                            strcpy(cwd, *folder);
+                            strcat(cwd, "/");
+                            // update path
+                            strcpy(path, *fileName);
+                        }
+                    }
+                } else {
+                    if (strlen(path) == 1) {
+                        if (strcmp(path, "/") == 0) {
+
+                            *folder = (char *)malloc (2);
+                            strcpy(*folder, "/");
+                            *fileName = (char *)malloc (2);
+                            strcpy(*fileName, ".");
+
+                        } else {
+                            if (strcmp(path, ".") != 0) {
+                                *folder = (char *)malloc (2);
+                                strcpy(*folder, cwd);
+                                *fileName = (char *)malloc (2);
+                                strcpy(*fileName, path);
+                        	}
+                        }
+                        // else should be '.'
+                    } else {
+
+                        // path is not given, cwd gives the whole full path
+                        if (strcmp(cwd, "/") != 0) {
+
+                            // get path from cwd
+                            path = getLastItemOfPath(cwdNoSlash);
+                            *fileName = (char *)malloc (strlen(path)+1);
+                            strcpy(*fileName, path);
+
+                            pos = strrchr(cwdNoSlash, '/');
+                            // folder is allocated by strndup
+                            *folder = strndup(cwdNoSlash, strlen(cwdNoSlash)-strlen(pos));
+
+                            // update cwd
+                            strcpy(cwd, *folder);
+                            strcat(cwd, "/");
+                        }
+                    }
+                }
+            }
+
+        } else {
+
+            // path is not given, cwd gives the whole full path
+            if (strcmp(cwd, "/") != 0) {
+
+
+                // path is not given, cwd gives the whole full path
+                // get path from cwd
+                path = getLastItemOfPath(cwdNoSlash);
+                *fileName = (char *)malloc (strlen(path)+1);
+                strcpy(*fileName, path);
+
+                pos = strrchr(cwdNoSlash, '/');
+                // folder is allocated by strndup
+                *folder = strndup(cwdNoSlash, strlen(path)-strlen(pos));
+
+                // update cwd
+                strcpy(cwd, *folder);
+                strcat(cwd, "/");
+            }
+        }
+    }
+
+}
 static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
     char msg[MAXPATHLEN + 24];
     // TODO: escape double-quotes
-    sprintf(msg, "\"%s\" is current directory.", client->cwd);
+
+    // FTP client like cyberduck fail to get the path used for CWD (next command after PWD when login) from ftp_CWD's response
+    // => the msg to be sent to FTP client must begin with connection->cwd !
+    if (strrchr(client->cwd, '"')) {
+        sprintf(msg, "%s is current directory", client->cwd);
+    } else {
+        sprintf(msg, "\"%s\" is current directory", client->cwd);
+    }
+
     return write_reply(client, 257, msg);
 }
 
 static int32_t ftp_CWD(client_t *client, char *path) {
-    int32_t result;
-    if (!vrt_chdir(client->cwd, path)) {
-        result = write_reply(client, 250, "CWD command successful.");
-    } else {
-        result = write_reply(client, 550, strerror(errno));
+    int32_t result = 0;
+    char *folder = NULL;
+    char *baseName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &baseName);
+
+	strcpy(client->cwd, folder);
+	if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+
+    if (baseName != NULL) {
+
+        if (!vrt_chdir(client->cwd, baseName)) {
+
+            char msg[MAXPATHLEN + 60] = "";
+            sprintf(msg, "CWD successful to %s", client->cwd);
+            write_reply(client, 250, msg);
+        } else  {
+
+            char msg[MAXPATHLEN + 40] = "";
+            sprintf(msg, "Error when CWD to cwd=%s path=%s : err=%s", client->cwd, baseName, strerror(errno));
+
+            write_reply(client, 550, msg);
+        }
+        free(baseName);
     }
+    if (folder != NULL) free(folder);
+
+    // always return 0 on server side
+    // - when client needs to create a folder tree on server side, client try CWD until it do not fail before launching the MKD command)
+    // - note that when ftp_CWD fails, an error is sent to the client with the 550 error code
     return result;
 }
 
 static int32_t ftp_CDUP(client_t *client, char *rest UNUSED) {
-    int32_t result;
+    int32_t result = 0;
     if (!vrt_chdir(client->cwd, "..")) {
         result = write_reply(client, 250, "CDUP command successful.");
     } else {
-        result = write_reply(client, 550, strerror(errno));
+        result = write_reply(client, 550, strerror(wiiu_geterrno()));
     }
     return result;
 }
 
 static int32_t ftp_DELE(client_t *client, char *path) {
-    if (!vrt_unlink(client->cwd, path)) {
-        return write_reply(client, 250, "File or directory removed.");
+    char *folder = NULL;
+    char *baseName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &baseName);
+	strcpy(client->cwd, folder);
+	if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    char msg[MAXPATHLEN + 40] = "";
+	int msgCode = 550;
+    if (!vrt_unlink(client->cwd, baseName)) {
+        sprintf(msg, "%s removed", baseName);
+		msgCode = 250;
     } else {
-        return write_reply(client, 550, strerror(errno));
+        sprintf(msg, "Error when DELE %s/%s : err = %s", client->cwd, baseName, strerror(wiiu_geterrno()));
     }
+    if (baseName != NULL) free(baseName);
+    if (folder != NULL) free(folder);
+    return write_reply(client, msgCode, msg);
 }
 
 static int32_t ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    if (!vrt_mkdir(client->cwd, path, 0777)) {
-        char msg[MAXPATHLEN + 21];
-        char abspath[MAXPATHLEN];
-        strcpy(abspath, client->cwd);
-        vrt_chdir(abspath, path); // TODO: error checking
-        // TODO: escape double-quotes
-        sprintf(msg, "\"%s\" directory created.", abspath);
-        return write_reply(client, 257, msg);
+    char *folder = NULL;
+    char *baseName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &baseName);
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    char msg[MAXPATHLEN + 60] = "";
+	int msgCode = 550;
+
+    if (vrt_checkdir(client->cwd, baseName) >= 0) {
+		msgCode = 257;
+		strcpy(msg, "folder already exist");
+
     } else {
-        return write_reply(client, 550, strerror(errno));
+
+        if (!vrt_mkdir(client->cwd, baseName, 0775)) {
+            msgCode = 250;
+            sprintf(msg, "directory %s created in %s", baseName, client->cwd);
+
+        } else {
+            sprintf(msg, "Error in MKD when cd to cwd=%s, path=%s : err = %s", client->cwd, path, strerror(wiiu_geterrno()));
+        }
     }
+
+    if (baseName != NULL) free(baseName);
+    if (folder != NULL) free(folder);
+    return write_reply(client, msgCode, msg);
 }
 
 static int32_t ftp_RNFR(client_t *client, char *path) {
-    strcpy(client->pending_rename, path);
-    return write_reply(client, 350, "Ready for RNTO.");
+    char *folder = NULL;
+    char *fileName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &fileName);
+    
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    strcpy(client->pending_rename, fileName);
+    char msg[MAXPATHLEN + 24] = "";
+    sprintf(msg, "Ready for RNTO for %s", fileName);
+
+    if (fileName != NULL) free(fileName);
+    if (folder != NULL) free(folder);
+
+    return write_reply(client, 350, msg);
 }
 
 static int32_t ftp_RNTO(client_t *client, char *path) {
     if (!*client->pending_rename) {
         return write_reply(client, 503, "RNFR required first.");
     }
-    int32_t result;
-    if (!vrt_rename(client->cwd, client->pending_rename, path)) {
+    int32_t result = 0;
+    char msg[MAXPATHLEN + 60] = "";
+    char *folder = NULL;
+    char *baseName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &baseName);
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    if (!vrt_rename(client->cwd, client->pending_rename, baseName)) {
         result = write_reply(client, 250, "Rename successful.");
     } else {
-        result = write_reply(client, 550, strerror(
+        sprintf(msg, "failed to rename %s to %s : err = %s", client->pending_rename, baseName, strerror(wiiu_geterrno()));
 
-                                                  errno));
+        result = write_reply(client, 550, msg);
     }
     *client->pending_rename = '\0';
+
+    if (baseName != NULL) free(baseName);
+    if (folder != NULL) free(folder);
+
     return result;
 }
 
 static int32_t ftp_SIZE(client_t *client, char *path) {
     struct stat st;
-    if (!vrt_stat(client->cwd, path, &st)) {
-        char size_buf[12];
-        sprintf(size_buf, "%llu", st.st_size);
-        return write_reply(client, 213, size_buf);
+
+    char *folder = NULL;
+    char *fileName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &fileName);
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    char msg[MAXPATHLEN + 40] = "";
+	int msgCode = 550;
+    if (!vrt_stat(client->cwd, fileName, &st)) {
+        sprintf(msg, "%llu", st.st_size);
+		msgCode=213;
     } else {
-        return write_reply(client, 550, strerror(errno));
+        sprintf(msg, "Error SIZE on %s in %s : err=%s", fileName, client->cwd, strerror(wiiu_geterrno()));
     }
+    if (fileName != NULL) free(fileName);
+    if (folder != NULL) free(folder);
+    return write_reply(client, msgCode, msg);
 }
 
 static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     close_passive_socket(client);
 
-    int32_t result;
+    int32_t result = 0;
     struct sockaddr_in bindAddress;
     while (passive_port < 5000) {
         client->passive_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
@@ -362,7 +652,7 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     char reply[49];
     uint16_t port       = bindAddress.sin_port;
     uint32_t ip         = network_gethostip();
-    struct in_addr addr = {};
+    struct in_addr UNUSED addr = {};
     addr.s_addr         = ip;
     console_printf("Listening for data connections at %s:%u...\n", inet_ntoa(addr), port);
     sprintf(reply, "Entering Passive Mode (%u,%u,%u,%u,%u,%u).", (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
@@ -483,7 +773,7 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
         char timestamp[13];
         strftime(timestamp, sizeof(timestamp), "%b %d  %Y", localtime(&mtime));
         snprintf(line, sizeof(line), "%c%s%s%s%s%s%s%s%s%s	1 0		0	 %10llu %s %s\r\n", (dirent->d_type & DT_DIR) ? 'd' : '-',
-                 st.st_mode & S_IRUSR ? "r" : "-",
+                 S_ISLNK(st.st_mode) ? "l" : (st.st_mode & S_IRUSR ? "r" : "-"),
                  st.st_mode & S_IWUSR ? "w" : "-",
                  st.st_mode & S_IXUSR ? "x" : "-",
                  st.st_mode & S_IRGRP ? "r" : "-",
@@ -507,7 +797,7 @@ static int32_t ftp_NLST(client_t *client, char *path) {
 
     DIR_P *dir = vrt_opendir(client->cwd, path);
     if (dir == NULL) {
-        return write_reply(client, 550, strerror(errno));
+        return write_reply(client, 550, strerror(wiiu_geterrno()));
     }
 
     int32_t result = prepare_data_connection(client, send_nlst, dir, vrt_closedir);
@@ -517,10 +807,10 @@ static int32_t ftp_NLST(client_t *client, char *path) {
 }
 
 static int32_t ftp_LIST(client_t *client, char *path) {
+    char rest[FTP_BUFFER_SIZE] = "";
     if (*path == '-') {
         // handle buggy clients that use "LIST -aL" or similar, at the expense of breaking paths that begin with '-'
         char flags[FTP_BUFFER_SIZE];
-        char rest[FTP_BUFFER_SIZE];
         char *args[] = {flags, rest};
         split(path, ' ', 1, args);
         path = rest;
@@ -529,7 +819,7 @@ static int32_t ftp_LIST(client_t *client, char *path) {
         path = ".";
     }
 
-    if (path && client->cwd) {
+    if (path && (strlen(client->cwd) != 0)) {
         if (strcmp(path, ".") == 0 && strcmp(client->cwd, "/") == 0) {
             UnmountVirtualPaths();
             MountVirtualDevices();
@@ -538,7 +828,7 @@ static int32_t ftp_LIST(client_t *client, char *path) {
 
     DIR_P *dir = vrt_opendir(client->cwd, path);
     if (dir == NULL) {
-        return write_reply(client, 550, strerror(errno));
+        return write_reply(client, 550, strerror(wiiu_geterrno()));
     }
 
     int32_t result = prepare_data_connection(client, send_list, dir, vrt_closedir);
@@ -548,9 +838,20 @@ static int32_t ftp_LIST(client_t *client, char *path) {
 }
 
 static int32_t ftp_RETR(client_t *client, char *path) {
+    char *folder = NULL;
+    char *fileName = NULL;
+
+
+    secureAndSplitPath(client->cwd, path, &folder, &fileName);
+    strcat(folder, "/");
+    
+	strcpy(client->cwd, folder);
+
+    if (fileName != NULL) free(fileName);
+    if (folder != NULL) free(folder);
     FILE *f = vrt_fopen(client->cwd, path, "rb");
     if (!f) {
-        return write_reply(client, 550, strerror(errno));
+        return write_reply(client, 550, strerror(wiiu_geterrno()));
     }
 
     int fd = fileno(f);
@@ -579,6 +880,31 @@ static int32_t stor_or_append(client_t *client, FILE *f) {
 }
 
 static int32_t ftp_STOR(client_t *client, char *path) {
+
+	// Fix  Feature Request: Recursively create directories #26 
+	// Handlers are launched asynchronously => ftp_STOR or ftp_APPE can be launched
+	// before ftp_MKD on file's folder
+    char *folder = NULL;
+    char *fileName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &fileName);
+    
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    char *folderName = getLastItemOfPath(folder);
+    char *pos = strrchr (folder, '/');
+    char *parentFolder = strndup(folder, strlen(folder)-strlen(pos)+1);
+
+    if (vrt_checkdir(parentFolder, folderName)) {
+        vrt_mkdir(parentFolder, folderName, 0775);
+    }
+
+    if (fileName != NULL) free(fileName);
+    if (folder != NULL) free(folder);
+    if (parentFolder != NULL) free(parentFolder);
+    if (folderName != NULL) free(folderName);
+	
     char *openMode = "wb";
     if (client->restart_marker) {
         openMode = "r+";
@@ -600,6 +926,31 @@ static int32_t ftp_STOR(client_t *client, char *path) {
 }
 
 static int32_t ftp_APPE(client_t *client, char *path) {
+
+	// Fix  Feature Request: Recursively create directories #26 
+	// Handlers are launched asynchronously => ftp_STOR or ftp_APPE can be launched
+	// before ftp_MKD on file's folder
+    char *folder = NULL;
+    char *fileName = NULL;
+
+    secureAndSplitPath(client->cwd, path, &folder, &fileName);
+    
+	strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    char *folderName = getLastItemOfPath(folder);
+    char *pos = strrchr (folder, '/');
+    char *parentFolder = strndup(folder, strlen(folder)-strlen(pos)+1);
+
+    if (vrt_checkdir(parentFolder, folderName)) {
+        vrt_mkdir(parentFolder, folderName, 0775);
+    }
+
+    if (fileName != NULL) free(fileName);
+    if (folder != NULL) free(folder);
+    if (parentFolder != NULL) free(parentFolder);
+    if (folderName != NULL) free(folderName);
+
     return stor_or_append(client, vrt_fopen(client->cwd, path, "ab"));
 }
 
@@ -668,7 +1019,7 @@ static int32_t ftp_SITE_UNKNOWN(client_t *client, char *rest UNUSED) {
 
 static int32_t ftp_SITE_LOAD(client_t *client, char *path UNUSED) {
     //   FILE *f = vrt_fopen(client->cwd, path, "rb");
-    //   if (!f) return write_reply(client, 550, strerror(errno));
+    //   if (!f) return write_reply(client, 550, strerror(wiiu_geterrno()));
     //   char *real_path = to_real_path(client->cwd, path);
     //   if (!real_path) goto end;
     //   load_from_file(f, real_path);
@@ -856,7 +1207,7 @@ static bool process_accept_events(int32_t server) {
 }
 
 static void process_data_events(client_t *client) {
-    int32_t result;
+    int32_t result = 0;
     if (!client->data_connection_connected) {
         if (client->passive_socket >= 0) {
             struct sockaddr_in data_peer_address;
@@ -936,7 +1287,7 @@ static void process_control_events(client_t *client) {
             }
 
             if (*next) {
-                int32_t result;
+                int32_t result = 0;
                 if ((result = process_command(client, next)) < 0) {
                     if (result != -EQUIT) {
                         console_printf("Closing connection due to error while processing command: %s\n", next);
@@ -975,7 +1326,7 @@ bool process_ftp_events(int32_t server) {
         }
     }
     if (!hasActiveClients) {
-        OSSleepTicks(OSMillisecondsToTicks(100));
+        OSSleepTicks(OSMillisecondsToTicks(500));
     } else {
         OSSleepTicks(OSMillisecondsToTicks(1));
     }

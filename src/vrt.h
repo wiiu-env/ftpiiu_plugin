@@ -31,6 +31,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <sys/dirent.h>
+#include <sys/param.h>
 
 typedef struct {
     DIR *dir;
@@ -45,6 +46,8 @@ char *to_real_path(char *virtual_cwd, char *virtual_path);
 FILE *vrt_fopen(char *cwd, char *path, char *mode);
 
 int vrt_stat(char *cwd, char *path, struct stat *st);
+
+int vrt_checkdir(char *cwd, char *path);
 
 int vrt_chdir(char *cwd, char *path);
 
