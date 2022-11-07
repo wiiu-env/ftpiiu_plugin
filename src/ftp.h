@@ -28,15 +28,17 @@ misrepresented as being the original software.
 
 #include <stdbool.h>
 #include <netinet/in.h>
+#include <coreinit/thread.h>
 
-// max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
-#define FTPMAXPATHLEN 256
+// to avoid warnings 
+#define UNUSED          __attribute__((unused))
 
 // Connection time out in seconds
 // set timeout to 90s 
 // (when adding a lot of files, server may take more than 60s before responding)
 #define FTP_CONNECTION_TIMEOUT 90
 
+// size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
 
 // max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
@@ -76,11 +78,11 @@ struct client_struct {
     // file to transfer
     FILE *f;    	
     // name of the file to upload
-    char fileName[FTPMAXPATHLEN];	
+    char fileName[FTPMAXPATHLEN];
+	
 };
 
 typedef struct client_struct client_t;
-
 
 int32_t  create_server(uint16_t port);
 

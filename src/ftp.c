@@ -42,8 +42,6 @@ misrepresented as being the original software.
 #include "virtualpath.h"
 #include "vrt.h"
 
-#define UNUSED          __attribute__((unused))
-
 // size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
 
@@ -68,13 +66,12 @@ static int32_t mainPriority = 16;
 #define SOCKET_MOPT_STACK_SIZE 0x2000
 extern int somemopt (int req_type, char* mem, unsigned int memlen, int flags);
 
+// array of clients
+static client_t WUT_ALIGNAS(64) *clients[MAX_CLIENTS] = {NULL};
+
 // thread for socket memory optimization
 static WUT_ALIGNAS(32) OSThread socketOptThread;
 static uint8_t WUT_ALIGNAS(8) *socketOptThreadStack=NULL;
-
-
-
-static client_t WUT_ALIGNAS(64) *clients[MAX_CLIENTS] = {NULL};
 
 // socket memory optimization
 // somemopt() will block until socket_lib_finish() call, so launch it in a separate
@@ -95,7 +92,7 @@ int socketOptThreadMain(int argc UNUSED, const char **argv UNUSED)
 
     return 0;
 }
-
+ 
 int32_t create_server(uint16_t port) {
 
     // get the current thread (on CPU1)
@@ -632,6 +629,7 @@ static int32_t ftp_RNFR(client_t *client, char *path) {
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
+    strcpy(client->fileName, fileName);
 	strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 
@@ -853,7 +851,7 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
         result = handler(client, (data_connection_callback) callback, arg);
         if (result < 0) {
             char msg[FTPMAXPATHLEN + 50] = "";
-            sprintf(msg, "Closing C[%d], transfer failed", client->index+1);
+            sprintf(msg, "Closing C[%d], transfer failed (%s)", client->index+1, client->fileName);
             result = write_reply(client, 520, msg);
         } else {
             client->data_connection_connected    = false;
@@ -993,26 +991,26 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     formatPath(client->cwd, path, &folder, &fileName);
     strcat(folder, "/");
     
+    strcpy(client->fileName, fileName);
 	strcpy(client->cwd, folder);
 
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
 	
-    FILE *f = vrt_fopen(client->cwd, fileName, "rb");
-    if (f) {        
+    client->f = vrt_fopen(client->cwd, client->fileName, "rb");
+    if (!client->f) {        
         char msg[FTPMAXPATHLEN + 40] = "";
         sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index+1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
-    int fd = fileno(f);
+    int fd = fileno(client->f);
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
         int32_t lseek_error = errno;
-        fclose(f);
+        fclose(client->f);
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(lseek_error));
     }
-    client->restart_marker = 0;
 
     int32_t result = prepare_data_connection(client, send_from_file, client, endTransfer);
     if (result < 0) endTransfer(client);
@@ -1028,6 +1026,7 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
+    strcpy(client->fileName, fileName);
 	strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 	
@@ -1044,8 +1043,8 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     if (parentFolder != NULL) free(parentFolder);
     if (folderName != NULL) free(folderName);
 
-	FILE *f = vrt_fopen(client->cwd, fileName, mode);
-    if (!f) {
+	client->f = vrt_fopen(client->cwd, client->fileName, mode);
+    if (!client->f) {
         
         char msg[FTPMAXPATHLEN + 40] = "";
         sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index+1, client->cwd, path, strerror(errno));
@@ -1078,7 +1077,7 @@ static int32_t ftp_REST(client_t *client, char *offset_str) {
     }
     client->restart_marker = offset;
     char msg[FTPMAXPATHLEN+100] = "";
-    sprintf(msg, "C[%d] restart position accepted (%lli)", client->index+1, offset);
+    sprintf(msg, "C[%d] restart position accepted (%lli) for %s", client->index+1, offset, client->fileName);
     return write_reply(client, 350, msg);
 }
 
@@ -1238,6 +1237,9 @@ static void cleanup_data_resources(client_t *client) {
     client->data_connection_callback_arg = NULL;
     client->data_connection_cleanup      = NULL;
     client->data_connection_timer        = 0;
+	
+    client->f = NULL;
+    strcpy(client->fileName, "");
 }
 
 static void cleanup_client(client_t *client) {
