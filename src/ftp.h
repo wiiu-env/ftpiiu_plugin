@@ -28,7 +28,7 @@ misrepresented as being the original software.
 
 #include <stdbool.h>
 #include <netinet/in.h>
-
+#include <stdio.h>
 
 // to avoid warnings 
 #define UNUSED          __attribute__((unused))
