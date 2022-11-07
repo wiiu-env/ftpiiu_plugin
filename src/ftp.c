@@ -23,8 +23,6 @@ misrepresented as being the original software.
 3.This notice may not be removed or altered from any source distribution.
 
 */
-#include "main.h"
-#include "utils/logger.h"
 #include <coreinit/thread.h>
 #include <errno.h>
 #include <malloc.h>
@@ -33,14 +31,15 @@ misrepresented as being the original software.
 #include <sys/dir.h>
 #include <sys/param.h>
 #include <unistd.h>
-
-//! TODO: fix those function
-#define gettime() OSGetTick()
+#include <inttypes.h>
 
 #include "ftp.h"
 #include "net.h"
 #include "virtualpath.h"
 #include "vrt.h"
+#include "utils/logger.h"
+
+#define BUS_SPEED 248625000
 
 // size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
@@ -58,6 +57,12 @@ static uint8_t num_clients   = 0;
 static uint16_t passive_port = 1024;
 static char *password        = NULL;
 
+// for benchmarking purpose
+static uint64_t startTime = 0;
+static uint64_t endTime = 0;
+static int32_t nbFilesReceived = 0;
+static int32_t nbFilesSent = 0;
+
 // priority of curent thread (when starting server)
 static int32_t mainPriority = 16;
 
@@ -68,6 +73,17 @@ extern int somemopt (int req_type, char* mem, unsigned int memlen, int flags);
 
 // array of clients
 static client_t WUT_ALIGNAS(64) *clients[MAX_CLIENTS] = {NULL};
+
+// max and min transfer rate speeds in MBs
+static float maxTransferRate = -9999;
+static float minTransferRate = 9999;
+
+// sum of average speeds
+static float sumAvgSpeed = 0;
+// last sum of average speeds
+static float lastSumAvgSpeed = 0;
+// number of measures used for average computation
+static uint32_t nbSpeedMeasures = 0;
 
 // thread for socket memory optimization
 static WUT_ALIGNAS(32) OSThread socketOptThread;
@@ -136,6 +152,9 @@ int32_t create_server(uint16_t port) {
         //gxprintf("Error listening on socket: [%i] %s\n", -ret, strerror(-ret));
         return ret;
     }
+
+    // compute start time
+    startTime = OSGetTime();
 
     return server;
 }
@@ -858,7 +877,8 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
             client->data_callback                = callback;
             client->data_connection_callback_arg = arg;
             client->data_connection_cleanup      = cleanup;
-            client->data_connection_timer        = gettime() + OSSecondsToTicks(FTP_CONNECTION_TIMEOUT);
+			
+            client->data_connection_timer = OSGetTime() + (OSTime)(FTP_CONNECTION_TIMEOUT)*1000000;
         }
     }
     return result;
@@ -1011,9 +1031,13 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(lseek_error));
     }
+    // init bytes counter
+    client->bytesTransferred = 0;
 
     int32_t result = prepare_data_connection(client, send_from_file, client, endTransfer);
     if (result < 0) endTransfer(client);
+	nbFilesSent++;
+		
     return result;
 }
 
@@ -1051,8 +1075,12 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         return write_reply(client, 550, msg);
     }
 
+    // init bytes counter
+    client->bytesTransferred = 0;
+    
     int32_t result = prepare_data_connection(client, recv_to_file, client, endTransfer);
     if (result < 0) endTransfer(client);
+	nbFilesReceived++;
     return result;
 }
 
@@ -1240,10 +1268,41 @@ static void cleanup_data_resources(client_t *client) {
 	
     client->f = NULL;
     strcpy(client->fileName, "");
+	client->bytesTransferred = -1;
+    client->speed = 0;
+	
+}
+
+static uint8_t  getNbOfClientsConnected() {
+
+    uint32_t client_index;
+	uint8_t nbc = 0;
+    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+        if (clients[client_index] != NULL) nbc++;
+	}
+    return nbc;
+}
+
+static void displayTransferSpeedStats() {
+    if (nbSpeedMeasures != 0) {
+	    // compute end time
+	    endTime = OSGetTime();
+        console_printf(" ");
+        console_printf("============================================================");
+        console_printf("  Speed (MB/s) [min = %.2f, mean = %.2f, max = %.2f]", minTransferRate, sumAvgSpeed/(float)nbSpeedMeasures, maxTransferRate);
+        console_printf("  Files received : %d / sent : %d", nbFilesReceived, nbFilesSent);
+        console_printf("  Time ellapsed = %" PRIu64 " sec", (endTime - startTime) * 4000ULL / BUS_SPEED);
+        console_printf("============================================================");
+
+        OSSleepTicks(OSSecondsToTicks(2));
+		// reset startTime
+	    startTime = OSGetTime();		
+    }
 }
 
 static void cleanup_client(client_t *client) {
     network_close_blocking(client->socket);
+    client->socket = -1;
     cleanup_data_resources(client);
     close_passive_socket(client);
     int client_index;
@@ -1266,12 +1325,14 @@ void cleanup_ftp() {
         if (client) {
             write_reply(client, 421, "Service not available, closing control connection.");
             cleanup_client(client);
-        }
+		}
     }
+	
     int ret;
     OSJoinThread(&socketOptThread, &ret);
     
-    if (socketOptThreadStack != NULL) free(socketOptThreadStack);    
+    if (socketOptThreadStack != NULL) free(socketOptThreadStack);
+	
 }
 
 static bool process_accept_events(int32_t server) {
@@ -1314,17 +1375,37 @@ static bool process_accept_events(int32_t server) {
 	        client->data_connection_callback_arg = NULL;
 	        client->data_connection_cleanup      = NULL;
 	        client->data_connection_timer        = 0;
+		    client->f = NULL;
+		    strcpy(client->fileName, "");
+			client->bytesTransferred = -1;
+		    client->speed = 0;
+			client->index = 0;
+		
 	        memcpy(&client->address, &client_address, sizeof(client_address));
-	        int client_index;
-	        if (write_reply(client, 220, "ftpii") < 0) {
+		
+			// send stats to client
+			uint8_t nbc = getNbOfClientsConnected();
+	        char msg[FTPMAXPATHLEN] = "";
+			if (nbc == 0) {
+		        sprintf(msg, "ftpiiu [%d connections max, %d sec timeout]", MAX_CLIENTS-1, FTP_CONNECTION_TIMEOUT);
+			} else {
+				// compute end time
+			    endTime = OSGetTime();
+				uint64_t duration = (endTime - startTime) * 4000ULL / BUS_SPEED;
+
+		        sprintf(msg, "ftpiiu [%d/%d connections, stats (MB/s): min = %.2f, mean = %.2f, max = %.2f], files received: %d / sent: %d, transfers done in %" PRIu64 "sec]", nbc-1, MAX_CLIENTS-1, minTransferRate, sumAvgSpeed/(float)nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration/1000);
+			}		
+	        if (write_reply(client, 220, msg) < 0) {
 	            console_printf("Error writing greeting.\n");
 	            network_close_blocking(peer);
 	            free(client);
 	            client = NULL;
 	        } else {
+		        int client_index;
 	            for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
 	                if (!clients[client_index]) {
 	                    clients[client_index] = client;
+						client->index = client_index;
 	                    break;
 	                }
 	            }
@@ -1361,11 +1442,15 @@ static void process_data_events(client_t *client) {
         if (client->data_connection_connected) {
             result = 1;
             console_printf("Connected to client!  Transferring data...\n");
-        } else if (gettime() > client->data_connection_timer) {
+        } else if (OSGetTime() > client->data_connection_timer) {
             result = -2;
 			
 	        char msg[2*FTPMAXPATHLEN] = "";
-            sprintf(msg, "C[%d] timed out when connecting", client->index+1);
+            if (strlen(client->fileName) == 0) {
+                sprintf(msg, "C[%d] timed out when connecting", client->index+1);
+            } else {
+                sprintf(msg, "C[%d] timed out when connecting for transferring %s", client->index+1, client->fileName);
+            }
 
 	        write_reply(client, 425, msg);
 						
@@ -1373,10 +1458,27 @@ static void process_data_events(client_t *client) {
         }
     } else {
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
+        // file transfer finished
+        if (client->f != NULL && result == 0 && client->bytesTransferred > 0) {
+
+            // compute transfer speed
+            uint64_t duration = (OSGetTime() - (client->data_connection_timer - FTP_CONNECTION_TIMEOUT*1000000)) * 4000ULL / BUS_SPEED;
+            if (duration != 0) {
+
+                // set a threshold on file size to consider file for average calculation
+                // take only files larger than the network buffer used
+
+                if (client->bytesTransferred >= 2*DEFAULT_NET_BUFFER_SIZE) {
+                    client->speed = (float)(client->bytesTransferred) / (float)(duration*1000);
+
+                        console_printf("> C[%d] %s transferred at %.2f MB/s (%d bytes)", client->index+1, client->fileName, client->speed, client->bytesTransferred);
+                }
+            }
+        }
+        
     }
 
     if (result <= 0 && result != -EAGAIN) {
-        cleanup_data_resources(client);
         if (result < 0) {
             if (result != -2) {
                 char msg[FTPMAXPATHLEN] = "";
@@ -1384,11 +1486,29 @@ static void process_data_events(client_t *client) {
                 write_reply(client, 520, msg);
             }
         } else {
+
             char msg[FTPMAXPATHLEN + 80] = "";
-            sprintf(msg, "C[%d] command executed successfully", client->index+1);
+            if (client->f != NULL) {
+                if (client->speed != 0) {
+                    sprintf(msg, "C[%d] %s transferred successfully %.0fKB/s", client->index+1, client->fileName, client->speed*1000);
+
+		            if (client->speed > maxTransferRate) maxTransferRate = client->speed;
+		            if (client->speed < minTransferRate) minTransferRate = client->speed;
+		            sumAvgSpeed += client->speed;
+					
+		            // increment nbAvgFiles and take speed into account for mean calculation
+		            nbSpeedMeasures++;
+
+                } else {
+                    sprintf(msg, "C[%d] %s transferred successfully", client->index+1, client->fileName);
+				}
+            }
+            else
+                sprintf(msg, "C[%d] command executed successfully", client->index+1);
 
             write_reply(client, 226, msg);
         }
+        cleanup_data_resources(client);
         if (result < 0) {
             cleanup_client(client);
         }
@@ -1456,24 +1576,41 @@ bool process_ftp_events(int32_t server) {
     bool network_down = !process_accept_events(server);
     if (!network_down) {
 	    int client_index;
-	    bool hasActiveClients = false;
+	    uint8_t nbActiveClients = 0;
+		
 	    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
 	        client_t *client = clients[client_index];
 	        if (client) {
-	            hasActiveClients = true;
+	            nbActiveClients++;
 	            if (client->data_callback) {
 	                process_data_events(client);
+					
 	            } else {
 	                process_control_events(client);
 	            }
 	        }
-	    }
-	    if (!hasActiveClients) {
-	        OSSleepTicks(OSMillisecondsToTicks(100));
-	    } else {
-	        OSSleepTicks(OSMillisecondsToTicks(1));
-	    }
+		}
+		
+		
+        OSSleepTicks(OSMillisecondsToTicks(5));
+		
+		
+		if (nbActiveClients <= 1)  {
+		
+			if (lastSumAvgSpeed != sumAvgSpeed) {
+				// last stats saved are outdated
+	            displayTransferSpeedStats();
+				// save last stats
+	            lastSumAvgSpeed = sumAvgSpeed;
+	        }
+		
+			if (nbActiveClients == 0 ) {
+				OSSleepTicks(OSSecondsToTicks(2));
+				// reset startTime
+			    startTime = OSGetTime();
+			}
+		}
 	}
-
+	
     return network_down;
 }

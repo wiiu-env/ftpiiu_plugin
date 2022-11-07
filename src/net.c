@@ -324,6 +324,7 @@ int32_t send_from_file(int32_t s, client_t *client) {
 
 
                     // data block sent sucessfully, continue
+                    client->bytesTransferred += result;
                     remaining -= result;
                 }
             }
@@ -406,7 +407,9 @@ int32_t recv_to_file(int32_t s, client_t *client) {
                 // error when writing f
                 result = -100;
                 break;
-            } 
+            } else {
+                client->bytesTransferred += result;
+            }
         }
     }
     free(buf);
@@ -414,4 +417,3 @@ int32_t recv_to_file(int32_t s, client_t *client) {
 
     return result;
 }
-

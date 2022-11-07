@@ -28,7 +28,7 @@ misrepresented as being the original software.
 
 #include <stdbool.h>
 #include <netinet/in.h>
-#include <coreinit/thread.h>
+
 
 // to avoid warnings 
 #define UNUSED          __attribute__((unused))
@@ -79,6 +79,10 @@ struct client_struct {
     FILE *f;    	
     // name of the file to upload
     char fileName[FTPMAXPATHLEN];
+    // for data transfer tracking
+    int32_t bytesTransferred;
+    // last speed computed in MB/s
+    float speed;	
 	
 };
 
