@@ -38,12 +38,7 @@ extern "C" {
 #include <sys/types.h>
 #include <unistd.h>
 
-// number of reties on socket operations
-#define FTP_RETRIES_NUMBER 12
-
-// default socket buffer size (max of value than can be set with setsockopt on SND/RCV buffers)
-#define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
-
+#include "ftp.h"
 
 #if 0
 void initialise_network();
@@ -71,9 +66,9 @@ int32_t network_close_blocking(int32_t s);
 
 int32_t send_exact(int32_t s, char *buf, int32_t length);
 
-int32_t send_from_file(int32_t s, FILE *f);
+int32_t send_from_file(int32_t s, client_t* client);
 
-int32_t recv_to_file(int32_t s, FILE *f);
+int32_t recv_to_file(int32_t s, client_t* client);
 
 #ifdef __cplusplus
 }

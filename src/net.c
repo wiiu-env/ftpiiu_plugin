@@ -272,7 +272,7 @@ int32_t send_exact(int32_t s, char *buf, int32_t length) {
 }
 
 
-int32_t send_from_file(int32_t s, FILE *f) {
+int32_t send_from_file(int32_t s, client_t *client) {
     // return code
     int32_t result = 0;
 
@@ -291,7 +291,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
     int32_t bytes_read = dlBufferSize;
     while (bytes_read) {
 
-        bytes_read = fread(buf, 1, dlBufferSize, f);
+        bytes_read = fread(buf, 1, dlBufferSize, client->f);
         if (bytes_read == 0) {
             // SUCCESS, no more to write
             result = 0;
@@ -333,14 +333,14 @@ int32_t send_from_file(int32_t s, FILE *f) {
             // check bytes read (now because on the last sending, data is already sent here = result)
             if (bytes_read < dlBufferSize) {
 
-                if (bytes_read < 0 || feof(f) == 0 || ferror(f) != 0) {
+                if (bytes_read < 0 || feof(client->f) == 0 || ferror(client->f) != 0) {
                     result = -103;
                     break;
                 }
             }
 
             // result = 0 and EOF
-            if ((feof(f) != 0) && (result == 0)) {
+            if ((feof(client->f) != 0) && (result == 0)) {
                 // SUCESS : eof file, last data bloc sent
                 break;
             }
@@ -352,7 +352,7 @@ int32_t send_from_file(int32_t s, FILE *f) {
     return result;
 }
 
-int32_t recv_to_file(int32_t s, FILE *f) {
+int32_t recv_to_file(int32_t s, client_t *client) {
     // return code
     int32_t result = 0;
 
@@ -373,7 +373,7 @@ int32_t recv_to_file(int32_t s, FILE *f) {
 
     // Not perfect because it's not aligned, but with the way fclose is called
     // using a custom buffer is annoying to clean up properly
-    setvbuf(f, NULL, _IOFBF, chunckSize);
+    setvbuf(client->f, NULL, _IOFBF, chunckSize);
 
     int32_t bytes_read   = chunckSize;
     uint32_t retryNumber = 0;
@@ -401,8 +401,8 @@ int32_t recv_to_file(int32_t s, FILE *f) {
             // bytes_received > 0
 
             // write bytes_received to f
-            result = fwrite(buf, 1, bytes_read, f);
-            if ((result < 0 && result < bytes_read) || ferror(f) != 0) {
+            result = fwrite(buf, 1, bytes_read, client->f);
+            if ((result < 0 && result < bytes_read) || ferror(client->f) != 0) {
                 // error when writing f
                 result = -100;
                 break;
