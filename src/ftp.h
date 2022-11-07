@@ -26,6 +26,10 @@ misrepresented as being the original software.
 #ifndef _FTP_H_
 #define _FTP_H_
 
+
+// max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
+#define FTPMAXPATHLEN 256
+
 #ifdef __cplusplus
 extern "C" {
 #endif

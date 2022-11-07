@@ -23,15 +23,17 @@ misrepresented as being the original software.
 
 */
 
-#include "main.h"
+
 #include <malloc.h>
 #include <stdarg.h>
 #include <string.h>
 #include <sys/dirent.h>
+#include <sys/errno.h>
 #include <unistd.h>
 
 #include "virtualpath.h"
 #include "vrt.h"
+#include "ftp.h"
 
 static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     char *path;
@@ -39,7 +41,7 @@ static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
         path = virtual_path;
     } else {
         size_t path_size = strlen(virtual_cwd) + strlen(virtual_path) + 1;
-        if (path_size > MAXPATHLEN || !(path = malloc(path_size))) return NULL;
+        if (path_size > FTPMAXPATHLEN || !(path = malloc(path_size))) return NULL;
         strcpy(path, virtual_cwd);
         strcat(path, virtual_path);
     }
@@ -110,7 +112,7 @@ end:
 	E.g. "/sd/foo"	-> "sd:/foo"
 		 "/sd"		-> "sd:/"
 		 "/sd/../usb" -> "usb:/"
-	The resulting path will fit in an array of size MAXPATHLEN
+	The resulting path will fit in an array of size FTPMAXPATHLEN
 	Returns NULL to indicate that the client-visible path is invalid
 */
 char *to_real_path(char *virtual_cwd, char *virtual_path) {
@@ -155,7 +157,7 @@ char *to_real_path(char *virtual_cwd, char *virtual_path) {
     }
 
     size_t real_path_size = strlen(prefix) + strlen(rest) + 1;
-    if (real_path_size > MAXPATHLEN) {
+    if (real_path_size > FTPMAXPATHLEN) {
         goto end;
     }
 

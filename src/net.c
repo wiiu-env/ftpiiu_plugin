@@ -28,6 +28,7 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <string.h>
 #include <sys/fcntl.h>
+#include <sys/errno.h>
 #include <unistd.h>
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
@@ -69,7 +70,7 @@ void initialise_network() {
 int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     int sock = socket(domain, type, protocol);
     if (sock < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : sock;
     }
     if (type == SOCK_STREAM) {
@@ -83,7 +84,7 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 int32_t network_bind(int32_t s, struct sockaddr *name, int32_t namelen) {
     int res = bind(s, name, namelen);
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;
@@ -92,7 +93,7 @@ int32_t network_bind(int32_t s, struct sockaddr *name, int32_t namelen) {
 int32_t network_listen(int32_t s, uint32_t backlog) {
     int res = listen(s, backlog);
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;
@@ -101,7 +102,7 @@ int32_t network_listen(int32_t s, uint32_t backlog) {
 int32_t network_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen) {
     int res = accept(s, addr, addrlen);
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;
@@ -110,7 +111,7 @@ int32_t network_accept(int32_t s, struct sockaddr *addr, socklen_t *addrlen) {
 int32_t network_connect(int32_t s, struct sockaddr *addr, int32_t addrlen) {
     int res = connect(s, addr, addrlen);
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;
@@ -119,7 +120,7 @@ int32_t network_connect(int32_t s, struct sockaddr *addr, int32_t addrlen) {
 int32_t network_read(int32_t s, void *mem, int32_t len) {
     int res = recv(s, mem, len, 0);
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;
@@ -135,7 +136,7 @@ int32_t network_write(int32_t s, const void *mem, int32_t len) {
     while (len) {
         int ret = send(s, mem, len, 0);
         if (ret < 0) {
-            int err    = -wiiu_geterrno();
+            int err    = -errno;
             transfered = (err < 0) ? err : ret;
             break;
         }
@@ -155,7 +156,7 @@ int32_t network_close(int32_t s) {
     int res = close(s);
 
     if (res < 0) {
-        int err = -wiiu_geterrno();
+        int err = -errno;
         return (err < 0) ? err : res;
     }
     return res;

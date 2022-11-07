@@ -31,6 +31,7 @@ misrepresented as being the original software.
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
+#include <sys/param.h>
 #include <unistd.h>
 
 //! TODO: fix those function
@@ -43,7 +44,11 @@ misrepresented as being the original software.
 
 #define UNUSED          __attribute__((unused))
 
+// size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
+
+// network allowed 8 simultaneuous connections max (before  getting errors)
+// 8 transfers + 1 browsing connection = 9
 #define MAX_CLIENTS     5
 
 static const uint16_t SRC_PORT    = 20;
@@ -64,8 +69,8 @@ struct client_struct {
     char representation_type;
     int32_t passive_socket;
     int32_t data_socket;
-    char cwd[MAXPATHLEN];
-    char pending_rename[MAXPATHLEN];
+    char cwd[FTPMAXPATHLEN];
+    char pending_rename[FTPMAXPATHLEN];
     off_t restart_marker;
     struct sockaddr_in address;
     bool authenticated;
@@ -240,7 +245,7 @@ static int32_t ftp_OPTS(client_t *client, char *rest) {
 }
 
 static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
-    char msg[MAXPATHLEN + 24];
+    char msg[FTPMAXPATHLEN + 24];
     // TODO: escape double-quotes
     sprintf(msg, "\"%s\" is current directory.", client->cwd);
     return write_reply(client, 257, msg);
@@ -279,8 +284,8 @@ static int32_t ftp_MKD(client_t *client, char *path) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
     if (!vrt_mkdir(client->cwd, path, 0777)) {
-        char msg[MAXPATHLEN + 21];
-        char abspath[MAXPATHLEN];
+        char msg[FTPMAXPATHLEN + 21];
+        char abspath[FTPMAXPATHLEN];
         strcpy(abspath, client->cwd);
         vrt_chdir(abspath, path); // TODO: error checking
         // TODO: escape double-quotes
@@ -439,11 +444,11 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
 
 static int32_t send_nlst(int32_t data_socket, DIR_P *iter) {
     int32_t result = 0;
-    char filename[MAXPATHLEN];
+    char filename[FTPMAXPATHLEN];
     struct dirent *dirent = NULL;
     while ((dirent = vrt_readdir(iter)) != 0) {
         size_t end_index = strlen(dirent->d_name);
-        if (end_index + 2 >= MAXPATHLEN)
+        if (end_index + 2 >= FTPMAXPATHLEN)
             continue;
         strcpy(filename, dirent->d_name);
         filename[end_index]     = CRLF[0];
@@ -461,6 +466,7 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
     int32_t result = 0;
     time_t mtime   = 0;
     uint64_t size  = 0;
+	// use MAXPATHLEN instead of FTPMAXPATHLEN becoause of dirent->d_name length (to avoid warning on build)
     char filename[MAXPATHLEN];
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     struct dirent *dirent = NULL;
@@ -493,8 +499,16 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
                  st.st_mode & S_IWOTH ? "w" : "-",
                  st.st_mode & S_IXOTH ? "x" : "-",
                  size, timestamp, dirent->d_name);
-        if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
-            break;
+				 
+		// check that the line does not exceed FTP_BUFFER_SIZE
+		if (strlen(line) < FTP_BUFFER_SIZE) {
+	        if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
+	            break;
+	        }
+		} else {
+			console_printf("ERROR : line exceed %d, skip sending", FTP_BUFFER_SIZE);
+			console_printf("line = [%s]", line);
+			return -EINVAL;
         }
     }
     return result < 0 ? result : 0;
