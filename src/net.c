@@ -28,16 +28,13 @@ misrepresented as being the original software.
 #include <stdio.h>
 #include <string.h>
 #include <sys/fcntl.h>
-#include <sys/errno.h>
 #include <unistd.h>
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 #include "net.h"
 
-#define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
-#define IO_BUFFER_SIZE          (512 * 1024)
-#define MIN_NET_BUFFER_SIZE     (4 * 1024)
+#define SO_RUSRBUF          0x10000 // enable userspace socket buffer
 
 extern uint32_t hostIpAddress;
 
@@ -67,17 +64,50 @@ void initialise_network() {
 }
 #endif
 
+static bool retry(int32_t socketError) {
+    bool status = false;
+
+    // retry
+    if (socketError == -EINPROGRESS ||
+        socketError == -EALREADY ||
+        socketError == -EBUSY ||
+        socketError == -ETIME ||
+        socketError == -ECONNREFUSED ||
+        socketError == -ECONNABORTED ||
+        socketError == -ETIMEDOUT ||
+        socketError == -EMFILE ||
+        socketError == -ENFILE ||
+        socketError == -EHOSTUNREACH ||
+        socketError == -EISCONN) status = true;
+
+    return status;
+}
+
 int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     int sock = socket(domain, type, protocol);
     if (sock < 0) {
         int err = -errno;
         return (err < 0) ? err : sock;
     }
-    if (type == SOCK_STREAM) {
-        int enable = 1;
-        // Activate WinScale
-        setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
+
+    uint32_t enable = 1;
+    // reuse (avoid "Not enought Space" error when transferring a large numbers of files)
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+
+    // Activate WinScale
+    setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
+
+    // socket memory optimization
+    while (1) {
+        if (setsockopt(sock, SOL_SOCKET, SO_RUSRBUF, &enable, sizeof(enable)) == 0)
+            break;
+
+        OSSleepTicks(OSMillisecondsToTicks(1));
     }
+    
+    // Set non blocking mode
+    set_blocking(sock, false);
+
     return sock;
 }
 
@@ -126,35 +156,65 @@ int32_t network_read(int32_t s, void *mem, int32_t len) {
     return res;
 }
 
+// read from network by chunk (len long)
+static int32_t network_readChunk(int32_t s, void *mem, int32_t len) {
+
+    int32_t received = 0;
+    int ret          = -1;
+
+    // while buffer is not full (len>0)
+    while (len > 0) {
+        // max ret value is 2*setsockopt value on SO_RCVBUF
+        ret = recv(s, mem, len, 0);
+        if (ret == 0) {
+            // client EOF detected
+            break;
+        } else if (ret < 0 && errno != EAGAIN && errno != ENODATA) {
+            int err  = -errno;
+            received = (err < 0) ? err : ret;
+            break;
+        } else {
+            if (ret > 0) {
+                received += ret;
+                len -= ret;
+                mem += ret;
+            }
+        }
+    }
+    // here len could be < 0 and so more than len bytes are read
+    // received > len and mem up to date
+    return received;
+}
+
 uint32_t network_gethostip() {
     return hostIpAddress;
 }
 
 int32_t network_write(int32_t s, const void *mem, int32_t len) {
-    int32_t transfered = 0;
+    int32_t transferred = 0;
 
     while (len) {
         int ret = send(s, mem, len, 0);
-        if (ret < 0) {
-            int err    = -errno;
-            transfered = (err < 0) ? err : ret;
+        if (ret < 0 && errno != EAGAIN && errno != ENODATA) {
+            int err     = -errno;
+            transferred = (err < 0) ? err : ret;
             break;
+        } else {
+            if (ret > 0) {
+                mem += ret;
+                transferred += ret;
+                len -= ret;
+            }
         }
-
-        mem += ret;
-        transfered += ret;
-        len -= ret;
     }
-    return transfered;
+    return transferred;
 }
 
 int32_t network_close(int32_t s) {
     if (s < 0) {
         return -1;
     }
-    shutdown(s, SHUT_RDWR);
     int res = close(s);
-
     if (res < 0) {
         int err = -errno;
         return (err < 0) ? err : res;
@@ -173,152 +233,185 @@ int32_t network_close_blocking(int32_t s) {
     return network_close(s);
 }
 
-int32_t create_server(uint16_t port) {
-    int32_t server = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
-    if (server < 0) {
-        return -1;
-    }
-
-    set_blocking(server, false);
-    uint32_t enable = 1;
-    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
-
-    struct sockaddr_in bindAddress;
-    memset(&bindAddress, 0, sizeof(bindAddress));
-    bindAddress.sin_family      = AF_INET;
-    bindAddress.sin_port        = htons(port);
-    bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    int32_t ret;
-    if ((ret = network_bind(server, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
-        network_close(server);
-        //gxprintf("Error binding socket: [%i] %s\n", -ret, strerror(-ret));
-        return ret;
-    }
-    if ((ret = network_listen(server, 3)) < 0) {
-        network_close(server);
-        //gxprintf("Error listening on socket: [%i] %s\n", -ret, strerror(-ret));
-        return ret;
-    }
-
-    return server;
-}
-
-typedef int32_t (*transferrer_type)(int32_t s, void *mem, int32_t len);
-
-static int32_t transfer_exact(int32_t s, char *buf, int32_t length, transferrer_type transferrer) {
+int32_t send_exact(int32_t s, char *buf, int32_t length) {
+    int buf_size      = length;
     int32_t result    = 0;
     int32_t remaining = length;
     int32_t bytes_transferred;
-    set_blocking(s, true);
-    uint32_t curNetBufferSize = DEFAULT_NET_BUFFER_SIZE;
 
+    uint32_t retryNumber = 0;
+
+    set_blocking(s, true);
     while (remaining) {
-    try_again_with_smaller_buffer:
-        bytes_transferred = transferrer(s, buf, MIN(remaining, (int) DEFAULT_NET_BUFFER_SIZE));
+
+    retry:
+        bytes_transferred = network_write(s, buf, MIN(remaining, (int) buf_size));
+
         if (bytes_transferred > 0) {
             remaining -= bytes_transferred;
             buf += bytes_transferred;
         } else if (bytes_transferred < 0) {
-            if (bytes_transferred == -EINVAL && curNetBufferSize == DEFAULT_NET_BUFFER_SIZE) {
-                curNetBufferSize = MIN_NET_BUFFER_SIZE;
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                goto try_again_with_smaller_buffer;
+
+            if (retry(bytes_transferred)) {
+                OSSleepTicks(OSMillisecondsToTicks(10));
+                retryNumber++;
+                if (retryNumber <= FTP_RETRIES_NUMBER) goto retry;
             }
-            if (bytes_transferred == -EAGAIN) {
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                continue;
-            }
+
             result = bytes_transferred;
             break;
         } else {
-            result = -ENODATA;
+            // result = bytes_transferred = 0
+            result = bytes_transferred;
             break;
         }
     }
     set_blocking(s, false);
+
     return result;
 }
 
-int32_t send_exact(int32_t s, char *buf, int32_t length) {
-    return transfer_exact(s, buf, length, (transferrer_type) network_write);
-}
 
 int32_t send_from_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, IO_BUFFER_SIZE);
-    if (!buf) {
-        return -1;
-    }
-
-    int32_t bytes_read;
+    // return code
     int32_t result = 0;
 
-    int bufSize = DEFAULT_NET_BUFFER_SIZE;
-    setsockopt(s, SOL_SOCKET, SO_SNDBUF, &bufSize, sizeof(bufSize));
 
-    bytes_read = fread(buf, 1, IO_BUFFER_SIZE, f);
-    if (bytes_read > 0) {
-        result = send_exact(s, buf, bytes_read);
-        if (result < 0)
-            goto end;
+    // max value = DEFAULT_NET_BUFFER_SIZE
+    int sndBuffSize = DEFAULT_NET_BUFFER_SIZE;
+    setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
+
+    // (buffer size = 2*DEFAULT_NET_BUFFER_SIZE)
+    int dlBufferSize          = 2 * sndBuffSize;
+    char WUT_ALIGNAS(64) *buf = (char *) memalign(0x40, dlBufferSize);
+    if (!buf) {
+        return -ENOMEM;
     }
-    if (bytes_read < IO_BUFFER_SIZE) {
-        result = -!feof(f);
-        goto end;
+
+    int32_t bytes_read = dlBufferSize;
+    while (bytes_read) {
+
+        bytes_read = fread(buf, 1, dlBufferSize, f);
+        if (bytes_read == 0) {
+            // SUCCESS, no more to write
+            result = 0;
+            break;
+        }
+        if (bytes_read > 0) {
+
+            uint32_t retryNumber = 0;
+            int32_t remaining    = bytes_read;
+
+            // Let buffer on file be larger than socket one for checking performances scenarii
+            while (remaining) {
+
+            send_again:
+                result = network_write(s, buf, MIN(remaining, dlBufferSize));
+
+                if (result < 0) {
+                    if (retry(result)) {
+                        retryNumber++;
+                        if (retryNumber <= FTP_RETRIES_NUMBER) {
+                            OSSleepTicks(OSMillisecondsToTicks(100));
+                            goto send_again;
+                        } else {
+                            retryNumber = 0;
+                        }
+                    }
+                    // result = error, client will be closed
+                    break;
+                } else {
+
+
+                    // data block sent sucessfully, continue
+                    remaining -= result;
+                }
+            }
+        }
+        if (result >= 0) {
+
+            // check bytes read (now because on the last sending, data is already sent here = result)
+            if (bytes_read < dlBufferSize) {
+
+                if (bytes_read < 0 || feof(f) == 0 || ferror(f) != 0) {
+                    result = -103;
+                    break;
+                }
+            }
+
+            // result = 0 and EOF
+            if ((feof(f) != 0) && (result == 0)) {
+                // SUCESS : eof file, last data bloc sent
+                break;
+            }
+        }
     }
     free(buf);
     buf = NULL;
-    return -EAGAIN;
-end:
-    free(buf);
-    buf = NULL;
+
     return result;
 }
 
 int32_t recv_to_file(int32_t s, FILE *f) {
-    char *buf = (char *) memalign(0x40, DEFAULT_NET_BUFFER_SIZE);
+    // return code
+    int32_t result = 0;
+
+    // MAX value = DEFAULT_NET_BUFFER_SIZE
+    int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
+    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
+
+
+    // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
+    uint32_t chunckSize = rcvBuffSize;
+
+    // using a buffer size >= 2*rcvBuffSize will handle the overflow
+    // (buffer size = 2*DEFAULT_NET_BUFFER_SIZE)
+    char WUT_ALIGNAS(64) *buf = (char *) memalign(0x40, 2 * rcvBuffSize);
     if (!buf) {
-        return -1;
+        return -ENOMEM;
     }
 
     // Not perfect because it's not aligned, but with the way fclose is called
     // using a custom buffer is annoying to clean up properly
-    setvbuf(f, NULL, _IOFBF, IO_BUFFER_SIZE);
+    setvbuf(f, NULL, _IOFBF, chunckSize);
 
-    int bufSize = DEFAULT_NET_BUFFER_SIZE;
-    setsockopt(s, SOL_SOCKET, SO_RCVBUF, &bufSize, sizeof(bufSize));
+    int32_t bytes_read   = chunckSize;
+    uint32_t retryNumber = 0;
 
-    uint32_t curNetBufferSize = DEFAULT_NET_BUFFER_SIZE;
+    while (bytes_read) {
+    read_again:
+        bytes_read = network_readChunk(s, buf, chunckSize);
+        if (bytes_read == 0) {
+            result = 0;
+            break;
+        } else if (bytes_read < 0) {
 
-    int32_t bytes_read;
-    while (1) {
-    try_again_with_smaller_buffer:
-        bytes_read = network_read(s, buf, curNetBufferSize);
-        if (bytes_read < 0) {
-            if (bytes_read == -EINVAL && curNetBufferSize == DEFAULT_NET_BUFFER_SIZE) {
-                curNetBufferSize = MIN_NET_BUFFER_SIZE;
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                goto try_again_with_smaller_buffer;
+            if (retry(result)) {
+                retryNumber++;
+                if (retryNumber <= FTP_RETRIES_NUMBER) {
+                    OSSleepTicks(OSMillisecondsToTicks(200));
+                    goto read_again;
+                } else {
+                    retryNumber = 0;
+                }
             }
-            if (bytes_read == -EAGAIN) {
-                OSSleepTicks(OSMillisecondsToTicks(1));
-                continue;
-            }
-            free(buf);
-            buf = NULL;
-            return bytes_read;
-        } else if (bytes_read == 0) {
-            free(buf);
-            buf = NULL;
-            return 0;
-        }
+            result = bytes_read;
+            break;
+        } else {
+            // bytes_received > 0
 
-        int32_t bytes_written = fwrite(buf, 1, bytes_read, f);
-        if (bytes_written < bytes_read) {
-            free(buf);
-            buf = NULL;
-            return -1;
+            // write bytes_received to f
+            result = fwrite(buf, 1, bytes_read, f);
+            if ((result < 0 && result < bytes_read) || ferror(f) != 0) {
+                // error when writing f
+                result = -100;
+                break;
+            } 
         }
     }
-    return -1;
+    free(buf);
+    buf = NULL;
+
+    return result;
 }
+

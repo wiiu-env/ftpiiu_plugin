@@ -47,9 +47,9 @@ misrepresented as being the original software.
 // size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
 
-// network allowed 8 simultaneuous connections max (before  getting errors)
+// network allowed 8 simultaneuous connections (max value before  getting errors)
 // 8 transfers + 1 browsing connection = 9
-#define MAX_CLIENTS     5
+#define MAX_CLIENTS     9
 
 static const uint16_t SRC_PORT    = 20;
 static const int32_t EQUIT        = 696969;
@@ -60,7 +60,18 @@ static uint8_t num_clients   = 0;
 static uint16_t passive_port = 1024;
 static char *password        = NULL;
 
+// priority of curent thread (when starting server)
+static int32_t mainPriority = 16;
+
 #define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ##ARGS);
+
+#define SOCKET_MOPT_STACK_SIZE 0x2000
+extern int somemopt (int req_type, char* mem, unsigned int memlen, int flags);
+
+// thread for socket memory optimization
+static WUT_ALIGNAS(32) OSThread socketOptThread;
+static uint8_t WUT_ALIGNAS(8) *socketOptThreadStack=NULL;
+
 
 typedef int32_t (*data_connection_callback)(int32_t data_socket, void *arg);
 
@@ -87,7 +98,74 @@ struct client_struct {
 
 typedef struct client_struct client_t;
 
-static client_t *clients[MAX_CLIENTS] = {NULL};
+static client_t WUT_ALIGNAS(64) *clients[MAX_CLIENTS] = {NULL};
+
+// socket memory optimization
+// somemopt() will block until socket_lib_finish() call, so launch it in a separate
+// thread
+int socketOptThreadMain(int argc UNUSED, const char **argv UNUSED)
+{
+    // allocate the buffer for socket memory optimization 
+    // size = DEFAULT_NET_BUFFER_SIZE * 4 (read/write with double buffering)
+	int bufSize = 4*DEFAULT_NET_BUFFER_SIZE;
+	
+	void WUT_ALIGNAS(64) *smoBuf = NULL;
+    smoBuf = (void *) memalign(64, bufSize);
+    if (somemopt(0x01, smoBuf, bufSize, 0) == -1 && errno != 50) {
+		console_printf("! ERROR : somemopt failed !");
+	}
+
+    free(smoBuf);
+
+    return 0;
+}
+
+int32_t create_server(uint16_t port) {
+
+    // get the current thread (on CPU1)
+    OSThread *thread = NULL;
+    thread = OSGetCurrentThread();
+    if (thread != NULL) {
+        // get priority of current thread
+        mainPriority = OSGetThreadPriority(thread);
+    }
+	
+	// set socket memory optimization
+    socketOptThreadStack = (uint8_t *) memalign(8, SOCKET_MOPT_STACK_SIZE);
+    
+    // set priority to mainPiority and launch on CPU0
+    if (socketOptThreadStack == NULL || !OSCreateThread(&socketOptThread, socketOptThreadMain, 0, NULL, socketOptThreadStack + SOCKET_MOPT_STACK_SIZE, SOCKET_MOPT_STACK_SIZE, mainPriority, OS_THREAD_ATTRIB_AFFINITY_CPU0)) {
+        console_printf("! ERROR : failed to create socket memory optimization thread!");
+        return -ENOMEM;
+    }
+    OSSetThreadName(&socketOptThread, "Socket memory optimizer thread");
+    OSResumeThread(&socketOptThread);
+
+    int32_t server = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
+    if (server < 0) {
+        return -1;
+    }
+
+    struct sockaddr_in bindAddress;
+    memset(&bindAddress, 0, sizeof(bindAddress));
+    bindAddress.sin_family      = AF_INET;
+    bindAddress.sin_port        = htons(port);
+    bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    int32_t ret;
+    if ((ret = network_bind(server, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
+        network_close(server);
+        //gxprintf("Error binding socket: [%i] %s\n", -ret, strerror(-ret));
+        return ret;
+    }
+    if ((ret = network_listen(server, MAX_CLIENTS)) < 0) {
+        network_close(server);
+        //gxprintf("Error listening on socket: [%i] %s\n", -ret, strerror(-ret));
+        return ret;
+    }
+
+    return server;
+}
 
 void set_ftp_password(char *new_password) {
     if (password) {
@@ -809,63 +887,70 @@ void cleanup_ftp() {
             cleanup_client(client);
         }
     }
+    int ret;
+    OSJoinThread(&socketOptThread, &ret);
+    
+    if (socketOptThreadStack != NULL) free(socketOptThreadStack);
 }
 
 static bool process_accept_events(int32_t server) {
-    int32_t peer;
-    struct sockaddr_in client_address;
-    socklen_t addrlen = sizeof(client_address);
-    while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
-        if (peer < 0) {
-            console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
-            return false;
-        }
+    // if the max connections number is not reached, treat incomming connections
+    if (num_clients < MAX_CLIENTS) {
+	    int32_t peer;
+	    struct sockaddr_in client_address;
+	    socklen_t addrlen = sizeof(client_address);
+	    while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
+	        if (peer < 0) {
+	            console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
+	            return false;
+	        }
 
-        console_printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
+	        console_printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
 
-        if (num_clients == MAX_CLIENTS) {
-            console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
-            network_close(peer);
-            return true;
-        }
+		        if (num_clients == MAX_CLIENTS-1) {
+	            console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
+	            network_close(peer);
+	            return true;
+	        }
 
-        client_t *client = malloc(sizeof(client_t));
-        if (!client) {
-            console_printf("Could not allocate memory for client state, not accepting client.\n");
-            network_close(peer);
-            return true;
-        }
-        client->socket              = peer;
-        client->representation_type = 'A';
-        client->passive_socket      = -1;
-        client->data_socket         = -1;
-        strcpy(client->cwd, "/");
-        *client->pending_rename              = '\0';
-        client->restart_marker               = 0;
-        client->authenticated                = false;
-        client->offset                       = 0;
-        client->data_connection_connected    = false;
-        client->data_callback                = NULL;
-        client->data_connection_callback_arg = NULL;
-        client->data_connection_cleanup      = NULL;
-        client->data_connection_timer        = 0;
-        memcpy(&client->address, &client_address, sizeof(client_address));
-        int client_index;
-        if (write_reply(client, 220, "ftpii") < 0) {
-            console_printf("Error writing greeting.\n");
-            network_close_blocking(peer);
-            free(client);
-            client = NULL;
-        } else {
-            for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-                if (!clients[client_index]) {
-                    clients[client_index] = client;
-                    break;
-                }
-            }
-            num_clients++;
-        }
-    }
+		    client_t *client = (client_t *) memalign(64, sizeof(client_t));
+	        if (!client) {
+	            console_printf("Could not allocate memory for client state, not accepting client.\n");
+	            network_close(peer);
+	            return true;
+	        }
+	        client->socket              = peer;
+	        client->representation_type = 'A';
+	        client->passive_socket      = -1;
+	        client->data_socket         = -1;
+	        strcpy(client->cwd, "/");
+	        *client->pending_rename              = '\0';
+	        client->restart_marker               = 0;
+	        client->authenticated                = false;
+	        client->offset                       = 0;
+	        client->data_connection_connected    = false;
+	        client->data_callback                = NULL;
+	        client->data_connection_callback_arg = NULL;
+	        client->data_connection_cleanup      = NULL;
+	        client->data_connection_timer        = 0;
+	        memcpy(&client->address, &client_address, sizeof(client_address));
+	        int client_index;
+	        if (write_reply(client, 220, "ftpii") < 0) {
+	            console_printf("Error writing greeting.\n");
+	            network_close_blocking(peer);
+	            free(client);
+	            client = NULL;
+	        } else {
+	            for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+	                if (!clients[client_index]) {
+	                    clients[client_index] = client;
+	                    break;
+	                }
+	            }
+	            num_clients++;
+	        }
+	    }
+	}
     return true;
 }
 

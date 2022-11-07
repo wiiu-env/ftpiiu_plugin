@@ -36,6 +36,8 @@ extern "C" {
 
 #include <stdbool.h>
 
+int32_t  create_server(uint16_t port);
+
 void accept_ftp_client(int32_t server);
 
 void set_ftp_password(char *new_password);
