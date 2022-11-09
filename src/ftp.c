@@ -84,11 +84,13 @@ static float sumAvgSpeed = 0;
 static float lastSumAvgSpeed = 0;
 // number of measures used for average computation
 static uint32_t nbSpeedMeasures = 0;
-
+/*
 // thread for socket memory optimization
 static WUT_ALIGNAS(32) OSThread socketOptThread;
 static uint8_t WUT_ALIGNAS(8) *socketOptThreadStack=NULL;
+*/
 
+/*
 // socket memory optimization
 // somemopt() will block until socket_lib_finish() call, so launch it in a separate
 // thread
@@ -108,6 +110,7 @@ int socketOptThreadMain(int argc UNUSED, const char **argv UNUSED)
 
     return 0;
 }
+*/
  
 int32_t create_server(uint16_t port) {
 
@@ -118,7 +121,7 @@ int32_t create_server(uint16_t port) {
         // get priority of current thread
         mainPriority = OSGetThreadPriority(thread);
     }
-	
+/*	
 	// set socket memory optimization
     socketOptThreadStack = (uint8_t *) memalign(8, SOCKET_MOPT_STACK_SIZE);
     
@@ -129,7 +132,7 @@ int32_t create_server(uint16_t port) {
     }
     OSSetThreadName(&socketOptThread, "Socket memory optimizer thread");
     OSResumeThread(&socketOptThread);
-
+*/
     int32_t server = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (server < 0) {
         return -1;
@@ -1327,12 +1330,12 @@ void cleanup_ftp() {
             cleanup_client(client);
 		}
     }
-	
+/*	
     int ret;
     OSJoinThread(&socketOptThread, &ret);
     
     if (socketOptThreadStack != NULL) free(socketOptThreadStack);
-	
+*/	
 }
 
 static bool process_accept_events(int32_t server) {
