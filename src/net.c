@@ -97,12 +97,14 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     // Activate WinScale
     setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
 
-    // socket memory optimization
+    // try socket memory optimization
+	int retries = 0; 
     while (1) {
         if (setsockopt(sock, SOL_SOCKET, SO_RUSRBUF, &enable, sizeof(enable)) == 0)
             break;
-
-        OSSleepTicks(OSMillisecondsToTicks(1));
+		if (retries++ > FTP_RETRIES_NUMBER*4)
+			break;			
+        OSSleepTicks(OSMillisecondsToTicks(10));
     }
     
     // Set non blocking mode
