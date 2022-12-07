@@ -84,33 +84,6 @@ static float sumAvgSpeed = 0;
 static float lastSumAvgSpeed = 0;
 // number of measures used for average computation
 static uint32_t nbSpeedMeasures = 0;
-/*
-// thread for socket memory optimization
-static WUT_ALIGNAS(32) OSThread socketOptThread;
-static uint8_t WUT_ALIGNAS(8) *socketOptThreadStack=NULL;
-*/
-
-/*
-// socket memory optimization
-// somemopt() will block until socket_lib_finish() call, so launch it in a separate
-// thread
-int socketOptThreadMain(int argc UNUSED, const char **argv UNUSED)
-{
-    // allocate the buffer for socket memory optimization 
-    // size = DEFAULT_NET_BUFFER_SIZE * 4 (read/write with double buffering)
-	int bufSize = 4*DEFAULT_NET_BUFFER_SIZE;
-	
-	void WUT_ALIGNAS(64) *smoBuf = NULL;
-    smoBuf = (void *) memalign(64, bufSize);
-    if (somemopt(0x01, smoBuf, bufSize, 0) == -1 && errno != 50) {
-		console_printf("! ERROR : somemopt failed !");
-	}
-
-    free(smoBuf);
-
-    return 0;
-}
-*/
  
 int32_t create_server(uint16_t port) {
 
@@ -121,18 +94,6 @@ int32_t create_server(uint16_t port) {
         // get priority of current thread
         mainPriority = OSGetThreadPriority(thread);
     }
-/*	
-	// set socket memory optimization
-    socketOptThreadStack = (uint8_t *) memalign(8, SOCKET_MOPT_STACK_SIZE);
-    
-    // set priority to mainPiority and launch on CPU0
-    if (socketOptThreadStack == NULL || !OSCreateThread(&socketOptThread, socketOptThreadMain, 0, NULL, socketOptThreadStack + SOCKET_MOPT_STACK_SIZE, SOCKET_MOPT_STACK_SIZE, mainPriority, OS_THREAD_ATTRIB_AFFINITY_CPU0)) {
-        console_printf("! ERROR : failed to create socket memory optimization thread!");
-        return -ENOMEM;
-    }
-    OSSetThreadName(&socketOptThread, "Socket memory optimizer thread");
-    OSResumeThread(&socketOptThread);
-*/
     int32_t server = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (server < 0) {
         return -1;
@@ -1272,7 +1233,6 @@ static void cleanup_data_resources(client_t *client) {
     client->f = NULL;
     strcpy(client->fileName, "");
 	client->bytesTransferred = -1;
-    client->speed = 0;
 	
 }
 
@@ -1330,12 +1290,6 @@ void cleanup_ftp() {
             cleanup_client(client);
 		}
     }
-/*	
-    int ret;
-    OSJoinThread(&socketOptThread, &ret);
-    
-    if (socketOptThreadStack != NULL) free(socketOptThreadStack);
-*/	
 }
 
 static bool process_accept_events(int32_t server) {
