@@ -31,9 +31,9 @@ misrepresented as being the original software.
 #include <sys/errno.h>
 #include <unistd.h>
 
+#include "ftp.h"
 #include "virtualpath.h"
 #include "vrt.h"
-#include "ftp.h"
 
 static char *virtual_abspath(char *virtual_cwd, char *virtual_path) {
     char *path;

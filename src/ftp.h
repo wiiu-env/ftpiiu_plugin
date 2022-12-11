@@ -26,26 +26,26 @@ misrepresented as being the original software.
 #ifndef _FTP_H_
 #define _FTP_H_
 
-#include <stdbool.h>
 #include <netinet/in.h>
+#include <stdbool.h>
 #include <stdio.h>
 
-// to avoid warnings 
-#define UNUSED          __attribute__((unused))
+// to avoid warnings
+#define UNUSED                  __attribute__((unused))
 
 // Connection time out in seconds
-// set timeout to 90s 
+// set timeout to 90s
 // (when adding a lot of files, server may take more than 60s before responding)
-#define FTP_CONNECTION_TIMEOUT 90
+#define FTP_CONNECTION_TIMEOUT  90
 
 // size of the message sent to clients
-#define FTP_BUFFER_SIZE 1024
+#define FTP_BUFFER_SIZE         1024
 
 // max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
-#define FTPMAXPATHLEN 256
+#define FTPMAXPATHLEN           256
 
 // number of reties on socket operations
-#define FTP_RETRIES_NUMBER 12
+#define FTP_RETRIES_NUMBER      12
 
 // default socket buffer size (max of value than can be set with setsockopt on SND/RCV buffers)
 #define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
@@ -76,19 +76,18 @@ struct client_struct {
     // index of the connection
     uint32_t index;
     // file to transfer
-    FILE *f;    	
+    FILE *f;
     // name of the file to upload
     char fileName[FTPMAXPATHLEN];
     // for data transfer tracking
     int32_t bytesTransferred;
     // last speed computed in MB/s
-    float speed;	
-	
+    float speed;
 };
 
 typedef struct client_struct client_t;
 
-int32_t  create_server(uint16_t port);
+int32_t create_server(uint16_t port);
 
 void accept_ftp_client(int32_t server);
 

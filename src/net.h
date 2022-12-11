@@ -66,9 +66,9 @@ int32_t network_close_blocking(int32_t s);
 
 int32_t send_exact(int32_t s, char *buf, int32_t length);
 
-int32_t send_from_file(int32_t s, client_t* client);
+int32_t send_from_file(int32_t s, client_t *client);
 
-int32_t recv_to_file(int32_t s, client_t* client);
+int32_t recv_to_file(int32_t s, client_t *client);
 
 #ifdef __cplusplus
 }

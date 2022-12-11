@@ -10,8 +10,8 @@ extern "C" {
 #include "version.h"
 #include <stdint.h>
 
-#define VERSION         "v0.4b"
-#define VERSION_FULL    VERSION VERSION_EXTRA
+#define VERSION      "v0.4b"
+#define VERSION_FULL VERSION VERSION_EXTRA
 
 extern bool gSystemFilesAllowed;
 

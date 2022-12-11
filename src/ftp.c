@@ -25,21 +25,21 @@ misrepresented as being the original software.
 */
 #include <coreinit/thread.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <malloc.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/dir.h>
 #include <sys/param.h>
 #include <unistd.h>
-#include <inttypes.h>
 
 #include "ftp.h"
 #include "net.h"
+#include "utils/logger.h"
 #include "virtualpath.h"
 #include "vrt.h"
-#include "utils/logger.h"
 
-#define BUS_SPEED 248625000
+#define BUS_SPEED       248625000
 
 // size of the message sent to clients
 #define FTP_BUFFER_SIZE 1024
@@ -58,21 +58,21 @@ static uint16_t passive_port = 1024;
 static char *password        = NULL;
 
 // for benchmarking purpose
-static uint64_t startTime = 0;
-static uint64_t endTime = 0;
+static uint64_t startTime      = 0;
+static uint64_t endTime        = 0;
 static int32_t nbFilesReceived = 0;
-static int32_t nbFilesSent = 0;
+static int32_t nbFilesSent     = 0;
 
 // priority of curent thread (when starting server)
 static int32_t mainPriority = 16;
 
 #define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ##ARGS);
 
-#define SOCKET_MOPT_STACK_SIZE 0x2000
-extern int somemopt (int req_type, char* mem, unsigned int memlen, int flags);
+#define SOCKET_MOPT_STACK_SIZE       0x2000
+extern int somemopt(int req_type, char *mem, unsigned int memlen, int flags);
 
 // array of clients
-static client_t WUT_ALIGNAS(64) *clients[MAX_CLIENTS] = {NULL};
+static client_t WUT_ALIGNAS(64) * clients[MAX_CLIENTS] = {NULL};
 
 // max and min transfer rate speeds in MBs
 static float maxTransferRate = -9999;
@@ -84,12 +84,12 @@ static float sumAvgSpeed = 0;
 static float lastSumAvgSpeed = 0;
 // number of measures used for average computation
 static uint32_t nbSpeedMeasures = 0;
- 
+
 int32_t create_server(uint16_t port) {
 
     // get the current thread (on CPU1)
     OSThread *thread = NULL;
-    thread = OSGetCurrentThread();
+    thread           = OSGetCurrentThread();
     if (thread != NULL) {
         // get priority of current thread
         mainPriority = OSGetThreadPriority(thread);
@@ -170,8 +170,8 @@ static int32_t endTransfer(client_t *client) {
     // close file if needed
     if (client->f != NULL) {
         fclose(client->f);
-	}
-	
+    }
+
     return result;
 }
 
@@ -266,8 +266,8 @@ static int32_t ftp_TYPE(client_t *client, char *rest) {
     } else {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    char msg[FTP_BUFFER_SIZE+30] = "";
-    sprintf(msg, "C[%d] Type set to %s", client->index+1, representation_type);
+    char msg[FTP_BUFFER_SIZE + 30] = "";
+    sprintf(msg, "C[%d] Type set to %s", client->index + 1, representation_type);
     return write_reply(client, 200, msg);
 }
 
@@ -293,23 +293,23 @@ static int32_t ftp_OPTS(client_t *client, char *rest) {
 // The three methods bellow are created to expand the FTP client support
 // client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
 // those functions are used to provide a same result for all clients :
-// 
+//
 // 		- client->cwd is the folder containing path and path is a file or folder name
 //
 
-// Remove eventually the last trailling slash of client->cwd 
+// Remove eventually the last trailling slash of client->cwd
 static void removeTrailingSlash(char **cwd) {
     if (strcmp(*cwd, ".") == 0) strcpy(*cwd, "/");
     else {
-        if ( (strlen(*cwd) > 0) && (strcmp(*cwd, "/") != 0) ) {
-            char *path = (char *)malloc (strlen(*cwd)+1);
+        if ((strlen(*cwd) > 0) && (strcmp(*cwd, "/") != 0)) {
+            char *path = (char *) malloc(strlen(*cwd) + 1);
             strcpy(path, *cwd);
             char *pos = strrchr(path, '/');
-            if (strcmp(pos,"/") == 0) {
+            if (strcmp(pos, "/") == 0) {
                 // folder is allocated by strndup
-                char *folder = strndup(*cwd, strlen(path)-strlen(pos));
+                char *folder = strndup(*cwd, strlen(path) - strlen(pos));
                 // update cwd
-                strcpy (*cwd, folder);
+                strcpy(*cwd, folder);
                 free(folder);
             }
             free(path);
@@ -319,47 +319,47 @@ static void removeTrailingSlash(char **cwd) {
 
 // basename(cwd) : return last folder in path
 // caller must free the returned string
-static char* basename(char *cwd) {
+static char *basename(char *cwd) {
     char *final = NULL;
-    if ( (strlen(cwd) > 0) && (strcmp(cwd, "/") != 0) ) {
-        char *path = (char *)malloc (strlen(cwd)+1);
+    if ((strlen(cwd) > 0) && (strcmp(cwd, "/") != 0)) {
+        char *path = (char *) malloc(strlen(cwd) + 1);
         strcpy(path, cwd);
         char *pos = strrchr(path, '/');
         // final is allocated by strdup
-        final = strdup(pos+1);
+        final = strdup(pos + 1);
         free(path);
     }
     return final;
 }
 
-// this method is used to format the path : 
+// this method is used to format the path :
 //   - client->cwd is the folder containing path
 //   - path is a file or folder name
 //
 // (client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck)
 //
 // caller must free folder and fileName strings
-static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
+static void formatPath(char *cwd, char *path, char **folder, char **fileName) {
 
     *fileName = NULL;
-    *folder = NULL;
+    *folder   = NULL;
     char *pos = NULL;
 
-    if ( (strcmp(cwd, "/") == 0) && (path &&((strcmp(path, ".") == 0) || (strcmp(path, "/") == 0))) ) {
+    if ((strcmp(cwd, "/") == 0) && (path && ((strcmp(path, ".") == 0) || (strcmp(path, "/") == 0)))) {
 
         // allocate and copy folder with cwd
-        *folder = (char *)malloc (strlen(cwd)+1);
+        *folder = (char *) malloc(strlen(cwd) + 1);
         strcpy(*folder, cwd);
 
         // allocate and copy fileName with .
-        *fileName = (char *)malloc (strlen(path)+1);
+        *fileName = (char *) malloc(strlen(path) + 1);
         strcpy(*fileName, ".");
 
     } else {
 
         char *cwdNoSlash = NULL;
         // allocate and copy fileName with path
-        cwdNoSlash = (char *)malloc (strlen(cwd)+1);
+        cwdNoSlash = (char *) malloc(strlen(cwd) + 1);
         strcpy(cwdNoSlash, cwd);
 
         // remove any trailing slash when cwd != "/"
@@ -375,9 +375,9 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
 
                 // get the folder from path
                 *fileName = basename(path);
-                pos = strrchr(path, '/');
+                pos       = strrchr(path, '/');
                 // folder is allocated by strndup
-                *folder = strndup(path, strlen(path)-strlen(pos));
+                *folder = strndup(path, strlen(path) - strlen(pos));
 
             } else {
 
@@ -391,9 +391,9 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
 
                         // get the fileName from cwd
                         *fileName = basename(cwdNoSlash);
-                        pos = strrchr(cwdNoSlash, '/');
+                        pos       = strrchr(cwdNoSlash, '/');
                         // folder is allocated by strndup
-                        *folder = strndup(cwdNoSlash, strlen(cwdNoSlash)-strlen(pos));
+                        *folder = strndup(cwdNoSlash, strlen(cwdNoSlash) - strlen(pos));
 
                         // update cwd
                         strcpy(cwd, *folder);
@@ -401,22 +401,22 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
 
                     } else {
 
-                        if ( strcmp(cwdNoSlash,"") != 0 ) {
+                        if (strcmp(cwdNoSlash, "") != 0) {
 
                             // allocate and copy fileName with path
-                            *fileName = (char *)malloc (strlen(path)+1);
+                            *fileName = (char *) malloc(strlen(path) + 1);
                             strcpy(*fileName, path);
                             // allocate and copy folder with cwd
-                            *folder = (char *)malloc (strlen(cwdNoSlash)+1);
+                            *folder = (char *) malloc(strlen(cwdNoSlash) + 1);
                             strcpy(*folder, cwdNoSlash);
 
                         } else {
 
                             // get the folder from path
                             *fileName = basename(path);
-                            pos = strrchr(path, '/');
+                            pos       = strrchr(path, '/');
                             // folder is allocated by strndup
-                            *folder = strndup(path, strlen(path)-strlen(pos));
+                            *folder = strndup(path, strlen(path) - strlen(pos));
 
                             // update cwd
                             strcpy(cwd, *folder);
@@ -429,18 +429,18 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
                     if (strlen(path) == 1) {
                         if (strcmp(path, "/") == 0) {
 
-                            *folder = (char *)malloc (2);
+                            *folder = (char *) malloc(2);
                             strcpy(*folder, "/");
-                            *fileName = (char *)malloc (2);
+                            *fileName = (char *) malloc(2);
                             strcpy(*fileName, ".");
 
                         } else {
                             if (strcmp(path, ".") != 0) {
-                                *folder = (char *)malloc (2);
+                                *folder = (char *) malloc(2);
                                 strcpy(*folder, cwd);
-                                *fileName = (char *)malloc (2);
+                                *fileName = (char *) malloc(2);
                                 strcpy(*fileName, path);
-                        	}
+                            }
                         }
                         // else should be '.'
                     } else {
@@ -449,13 +449,13 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
                         if (strcmp(cwd, "/") != 0) {
 
                             // get path from cwd
-                            path = basename(cwdNoSlash);
-                            *fileName = (char *)malloc (strlen(path)+1);
+                            path      = basename(cwdNoSlash);
+                            *fileName = (char *) malloc(strlen(path) + 1);
                             strcpy(*fileName, path);
 
                             pos = strrchr(cwdNoSlash, '/');
                             // folder is allocated by strndup
-                            *folder = strndup(cwdNoSlash, strlen(cwdNoSlash)-strlen(pos));
+                            *folder = strndup(cwdNoSlash, strlen(cwdNoSlash) - strlen(pos));
 
                             // update cwd
                             strcpy(cwd, *folder);
@@ -473,13 +473,13 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
 
                 // path is not given, cwd gives the whole full path
                 // get path from cwd
-                path = basename(cwdNoSlash);
-                *fileName = (char *)malloc (strlen(path)+1);
+                path      = basename(cwdNoSlash);
+                *fileName = (char *) malloc(strlen(path) + 1);
                 strcpy(*fileName, path);
 
                 pos = strrchr(cwdNoSlash, '/');
                 // folder is allocated by strndup
-                *folder = strndup(cwdNoSlash, strlen(path)-strlen(pos));
+                *folder = strndup(cwdNoSlash, strlen(path) - strlen(pos));
 
                 // update cwd
                 strcpy(cwd, *folder);
@@ -487,7 +487,6 @@ static void formatPath(char *cwd, char* path, char **folder, char **fileName) {
             }
         }
     }
-
 }
 static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
     char msg[FTPMAXPATHLEN + 24];
@@ -506,13 +505,13 @@ static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
 
 static int32_t ftp_CWD(client_t *client, char *path) {
     int32_t result = 0;
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
 
-	strcpy(client->cwd, folder);
-	if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 
 
     if (fileName != NULL) {
@@ -520,12 +519,12 @@ static int32_t ftp_CWD(client_t *client, char *path) {
         if (!vrt_chdir(client->cwd, fileName)) {
 
             char msg[FTPMAXPATHLEN + 60] = "";
-            sprintf(msg, "C[%d] CWD successful to %s", client->index+1, client->cwd);
+            sprintf(msg, "C[%d] CWD successful to %s", client->index + 1, client->cwd);
             write_reply(client, 250, msg);
-        } else  {
+        } else {
 
             char msg[FTPMAXPATHLEN + 40] = "";
-            sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%s", client->index+1, client->cwd, fileName, strerror(errno));
+            sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%s", client->index + 1, client->cwd, fileName, strerror(errno));
 
             write_reply(client, 550, msg);
         }
@@ -540,33 +539,33 @@ static int32_t ftp_CWD(client_t *client, char *path) {
 }
 
 static int32_t ftp_CDUP(client_t *client, char *rest UNUSED) {
-    int32_t result = 0;
-	char msg[FTPMAXPATHLEN + 40] = "";
-	
-	if (!vrt_chdir(client->cwd, "..")) {
-        sprintf(msg, "C[%d] CDUP command successful", client->index+1);
+    int32_t result               = 0;
+    char msg[FTPMAXPATHLEN + 40] = "";
+
+    if (!vrt_chdir(client->cwd, "..")) {
+        sprintf(msg, "C[%d] CDUP command successful", client->index + 1);
         result = write_reply(client, 250, "CDUP command successful.");
     } else {
-        sprintf(msg, "C[%d] Error when CDUP to %s : err = %s", client->index+1, client->cwd, strerror(errno));
+        sprintf(msg, "C[%d] Error when CDUP to %s : err = %s", client->index + 1, client->cwd, strerror(errno));
         result = write_reply(client, 550, strerror(errno));
     }
     return result;
 }
 
 static int32_t ftp_DELE(client_t *client, char *path) {
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
-	strcpy(client->cwd, folder);
-	if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    strcpy(client->cwd, folder);
+    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
     char msg[FTPMAXPATHLEN + 40] = "";
-	int msgCode = 550;
+    int msgCode                  = 550;
     if (!vrt_unlink(client->cwd, fileName)) {
-        sprintf(msg, "C[%d] %s removed", client->index+1, fileName);
-		msgCode = 250;
+        sprintf(msg, "C[%d] %s removed", client->index + 1, fileName);
+        msgCode = 250;
     } else {
-        sprintf(msg, "C[%d] Error when DELE %s/%s : err = %s", client->index+1, client->cwd, fileName, strerror(errno));
+        sprintf(msg, "C[%d] Error when DELE %s/%s : err = %s", client->index + 1, client->cwd, fileName, strerror(errno));
     }
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
@@ -577,28 +576,28 @@ static int32_t ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 
     char msg[FTPMAXPATHLEN + 60] = "";
-	int msgCode = 550;
+    int msgCode                  = 550;
 
     if (vrt_checkdir(client->cwd, fileName) >= 0) {
-		msgCode = 257;
-		sprintf(msg, "C[%d] folder already exist", client->index+1);
+        msgCode = 257;
+        sprintf(msg, "C[%d] folder already exist", client->index + 1);
 
     } else {
 
         if (!vrt_mkdir(client->cwd, fileName, 0775)) {
             msgCode = 250;
-            sprintf(msg, "C[%d] directory %s created in %s", client->index+1, fileName, client->cwd);
+            sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, fileName, client->cwd);
 
         } else {
-            sprintf(msg, "C[%d] Error in MKD when cd to cwd=%s, path=%s : err = %s", client->index+1, client->cwd, fileName, strerror(errno));
+            sprintf(msg, "C[%d] Error in MKD when cd to cwd=%s, path=%s : err = %s", client->index + 1, client->cwd, fileName, strerror(errno));
         }
     }
 
@@ -608,17 +607,17 @@ static int32_t ftp_MKD(client_t *client, char *path) {
 }
 
 static int32_t ftp_RNFR(client_t *client, char *path) {
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
     strcpy(client->fileName, fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 
     strcpy(client->pending_rename, fileName);
     char msg[FTPMAXPATHLEN + 24] = "";
-    sprintf(msg, "C[%d] Ready for RNTO for %s", client->index+1, fileName);
+    sprintf(msg, "C[%d] Ready for RNTO for %s", client->index + 1, fileName);
 
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
@@ -629,21 +628,21 @@ static int32_t ftp_RNFR(client_t *client, char *path) {
 static int32_t ftp_RNTO(client_t *client, char *path) {
     char msg[FTPMAXPATHLEN + 60] = "";
     if (!*client->pending_rename) {
-        sprintf(msg, "C[%d] RNFR required first", client->index+1);
+        sprintf(msg, "C[%d] RNFR required first", client->index + 1);
         return write_reply(client, 503, msg);
     }
     int32_t result = 0;
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
     if (!vrt_rename(client->cwd, client->pending_rename, fileName)) {
-        sprintf(msg, "C[%d] Rename %s to %s successfully", client->index+1, client->pending_rename, path);
+        sprintf(msg, "C[%d] Rename %s to %s successfully", client->index + 1, client->pending_rename, path);
         result = write_reply(client, 250, msg);
     } else {
-        sprintf(msg, "C[%d] failed to rename %s to %s : err = %s", client->index+1, client->pending_rename, fileName, strerror(errno));
+        sprintf(msg, "C[%d] failed to rename %s to %s : err = %s", client->index + 1, client->pending_rename, fileName, strerror(errno));
 
         result = write_reply(client, 550, msg);
     }
@@ -658,20 +657,20 @@ static int32_t ftp_RNTO(client_t *client, char *path) {
 static int32_t ftp_SIZE(client_t *client, char *path) {
     struct stat st;
 
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
 
     char msg[FTPMAXPATHLEN + 40] = "";
-	int msgCode = 550;
+    int msgCode                  = 550;
     if (!vrt_stat(client->cwd, fileName, &st)) {
         sprintf(msg, "%llu", st.st_size);
-		msgCode=213;
+        msgCode = 213;
     } else {
-        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%s", client->index+1, fileName, client->cwd, strerror(errno));
+        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%s", client->index + 1, fileName, client->cwd, strerror(errno));
     }
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
@@ -682,19 +681,17 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
 
     close_passive_socket(client);
 
-    int nbTries=0;
-    while (1)
-    {
+    int nbTries = 0;
+    while (1) {
         client->passive_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (client->passive_socket >= 0) break;
-		OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS*30));
+        OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS * 30));
         if (++nbTries > FTP_RETRIES_NUMBER) {
             char msg[FTP_BUFFER_SIZE];
-            sprintf(msg, "C[%d] failed to create passive socket (%d), err = %d (%s)", client->index+1, client->passive_socket, errno, strerror(errno));
+            sprintf(msg, "C[%d] failed to create passive socket (%d), err = %d (%s)", client->index + 1, client->passive_socket, errno, strerror(errno));
             console_printf("~ WARNING : %s", msg);
             return write_reply(client, 520, msg);
         }
-
     }
 
     struct sockaddr_in bindAddress;
@@ -704,21 +701,21 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
     if (passive_port == 65534) {
         passive_port = 1024;
     } else {
-		passive_port++;
-	}
-    bindAddress.sin_port = htons(passive_port);
+        passive_port++;
+    }
+    bindAddress.sin_port        = htons(passive_port);
     bindAddress.sin_addr.s_addr = htonl(INADDR_ANY);
 
     nbTries = 0;
     while (1) {
         int32_t result;
-        result = network_bind(client->passive_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress));
+        result = network_bind(client->passive_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress));
         if (result >= 0)
             break;
-		OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS*30));
+        OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS * 30));
         if (++nbTries > FTP_RETRIES_NUMBER) {
             char msg[FTP_BUFFER_SIZE];
-            sprintf(msg, "C[%d] failed to bind passive socket (%d), err = %d (%s)", client->index+1, client->passive_socket, errno, strerror(errno));
+            sprintf(msg, "C[%d] failed to bind passive socket (%d), err = %d (%s)", client->index + 1, client->passive_socket, errno, strerror(errno));
             console_printf("~ WARNING : %s", msg);
             close_passive_socket(client);
             return write_reply(client, 520, msg);
@@ -732,22 +729,22 @@ static int32_t ftp_PASV(client_t *client, char *rest UNUSED) {
 
         if (result >= 0)
             break;
-		OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS*30));
+        OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS * 30));
         if (++nbTries > FTP_RETRIES_NUMBER) {
             char msg[FTP_BUFFER_SIZE];
-            sprintf(msg, "C[%d] failed to listen on passive socket (%d), err = %d (%s)", client->index+1, client->passive_socket, errno, strerror(errno));
+            sprintf(msg, "C[%d] failed to listen on passive socket (%d), err = %d (%s)", client->index + 1, client->passive_socket, errno, strerror(errno));
             console_printf("~ WARNING : %s", msg);
             close_passive_socket(client);
             return write_reply(client, 520, msg);
         }
     }
-    char reply[49+2+16] = "";
-    uint16_t port = bindAddress.sin_port;
-    uint32_t ip = network_gethostip();
+    char reply[49 + 2 + 16]    = "";
+    uint16_t port              = bindAddress.sin_port;
+    uint32_t ip                = network_gethostip();
     struct in_addr UNUSED addr = {};
-    addr.s_addr         = ip;
-    console_printf("C[%d] : listening for data connections at %s:%u...\n",client->index+1 , inet_ntoa(addr), port);
-    sprintf(reply, "C[%d] entering Passive Mode (%u,%u,%u,%u,%u,%u).", client->index+1, (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
+    addr.s_addr                = ip;
+    console_printf("C[%d] : listening for data connections at %s:%u...\n", client->index + 1, inet_ntoa(addr), port);
+    sprintf(reply, "C[%d] entering Passive Mode (%u,%u,%u,%u,%u,%u).", client->index + 1, (ip >> 24) & 0xff, (ip >> 16) & 0xff, (ip >> 8) & 0xff, ip & 0xff, (port >> 8) & 0xff, port & 0xff);
     return write_reply(client, 227, reply);
 }
 
@@ -774,20 +771,19 @@ typedef int32_t (*data_connection_handler)(client_t *client, data_connection_cal
 
 static int32_t prepare_data_connection_active(client_t *client, data_connection_callback callback UNUSED, void *arg UNUSED) {
 
-    int nbTries=0;
+    int nbTries = 0;
 
-    while (1)
-    {
+    while (1) {
         client->data_socket = network_socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
         if (client->data_socket >= 0)
             break;
-		OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS*30));
+        OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS * 30));
         if (++nbTries > FTP_RETRIES_NUMBER) {
             char msg[FTP_BUFFER_SIZE];
-            sprintf(msg, "C[%d] failed to create data socket (%d), err = %d (%s)", client->index+1, client->data_socket, errno, strerror(errno));
+            sprintf(msg, "C[%d] failed to create data socket (%d), err = %d (%s)", client->index + 1, client->data_socket, errno, strerror(errno));
             console_printf("~ WARNING : %s", msg);
             return write_reply(client, 520, msg);
-		}
+        }
     }
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
@@ -798,13 +794,13 @@ static int32_t prepare_data_connection_active(client_t *client, data_connection_
     nbTries = 0;
     while (1) {
         int32_t result;
-        result = network_bind(client->data_socket, (struct sockaddr *)&bindAddress, sizeof(bindAddress));
+        result = network_bind(client->data_socket, (struct sockaddr *) &bindAddress, sizeof(bindAddress));
         if (result >= 0)
             break;
-		OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS*30));
+        OSSleepTicks(OSMillisecondsToTicks(MAX_CLIENTS * 30));
         if (++nbTries > FTP_RETRIES_NUMBER) {
             char msg[FTP_BUFFER_SIZE];
-            sprintf(msg, "C[%d] failed to bind data socket (%d), err = %d (%s)", client->index+1, client->data_socket, errno, strerror(errno));
+            sprintf(msg, "C[%d] failed to bind data socket (%d), err = %d (%s)", client->index + 1, client->data_socket, errno, strerror(errno));
             console_printf("~ WARNING : %s", msg);
             network_close(client->data_socket);
             client->data_socket = -1;
@@ -824,7 +820,7 @@ static int32_t prepare_data_connection_passive(client_t *client, data_connection
 
 static int32_t prepare_data_connection(client_t *client, void *callback, void *arg, void *cleanup) {
     char msgStatus[FTPMAXPATHLEN + 60] = "";
-    sprintf(msgStatus, "C[%d] connected", client->index+1);
+    sprintf(msgStatus, "C[%d] connected", client->index + 1);
 
     int32_t result = write_reply(client, 150, msgStatus);
     if (result >= 0) {
@@ -834,15 +830,15 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
         result = handler(client, (data_connection_callback) callback, arg);
         if (result < 0) {
             char msg[FTPMAXPATHLEN + 50] = "";
-            sprintf(msg, "Closing C[%d], transfer failed (%s)", client->index+1, client->fileName);
+            sprintf(msg, "Closing C[%d], transfer failed (%s)", client->index + 1, client->fileName);
             result = write_reply(client, 520, msg);
         } else {
             client->data_connection_connected    = false;
             client->data_callback                = callback;
             client->data_connection_callback_arg = arg;
             client->data_connection_cleanup      = cleanup;
-			
-            client->data_connection_timer = OSGetTime() + (OSTime)(FTP_CONNECTION_TIMEOUT)*1000000;
+
+            client->data_connection_timer = OSGetTime() + (OSTime) (FTP_CONNECTION_TIMEOUT) *1000000;
         }
     }
     return result;
@@ -872,7 +868,7 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
     int32_t result = 0;
     time_t mtime   = 0;
     uint64_t size  = 0;
-	// use MAXPATHLEN instead of FTPMAXPATHLEN becoause of dirent->d_name length (to avoid warning on build)
+    // use MAXPATHLEN instead of FTPMAXPATHLEN becoause of dirent->d_name length (to avoid warning on build)
     char filename[MAXPATHLEN];
     char line[MAXPATHLEN + 56 + CRLF_LENGTH + 1];
     struct dirent *dirent = NULL;
@@ -905,17 +901,17 @@ static int32_t send_list(int32_t data_socket, DIR_P *iter) {
                  st.st_mode & S_IWOTH ? "w" : "-",
                  st.st_mode & S_IXOTH ? "x" : "-",
                  size, timestamp, dirent->d_name);
-				 
-		// check that the line does not exceed FTP_BUFFER_SIZE
-		if (strlen(line) < FTP_BUFFER_SIZE) {
-	        if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
-	            break;
-	        }
-		} else {
-			console_printf("ERROR : line exceed %d, skip sending", FTP_BUFFER_SIZE);
-			console_printf("line = [%s]", line);
-			return -EINVAL;
-		}
+
+        // check that the line does not exceed FTP_BUFFER_SIZE
+        if (strlen(line) < FTP_BUFFER_SIZE) {
+            if ((result = send_exact(data_socket, line, strlen(line))) < 0) {
+                break;
+            }
+        } else {
+            console_printf("ERROR : line exceed %d, skip sending", FTP_BUFFER_SIZE);
+            console_printf("line = [%s]", line);
+            return -EINVAL;
+        }
     }
     return result < 0 ? result : 0;
 }
@@ -968,23 +964,23 @@ static int32_t ftp_LIST(client_t *client, char *path) {
 }
 
 static int32_t ftp_RETR(client_t *client, char *path) {
-    char *folder = NULL;
+    char *folder   = NULL;
     char *fileName = NULL;
 
 
     formatPath(client->cwd, path, &folder, &fileName);
     strcat(folder, "/");
-    
+
     strcpy(client->fileName, fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
 
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
-	
+
     client->f = vrt_fopen(client->cwd, client->fileName, "rb");
-    if (!client->f) {        
+    if (!client->f) {
         char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index+1, client->cwd, path, strerror(errno));
+        sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
@@ -1000,27 +996,27 @@ static int32_t ftp_RETR(client_t *client, char *path) {
 
     int32_t result = prepare_data_connection(client, send_from_file, client, endTransfer);
     if (result < 0) endTransfer(client);
-	nbFilesSent++;
-		
+    nbFilesSent++;
+
     return result;
 }
 
 static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
-	
-	// Fix  Feature Request: Recursively create directories #26 
-	// Handlers are launched asynchronously => ftp_STOR or ftp_APPE can be launched
-	// before ftp_MKD on file's folder
-    char *folder = NULL;
+
+    // Fix  Feature Request: Recursively create directories #26
+    // Handlers are launched asynchronously => ftp_STOR or ftp_APPE can be launched
+    // before ftp_MKD on file's folder
+    char *folder   = NULL;
     char *fileName = NULL;
 
     formatPath(client->cwd, path, &folder, &fileName);
     strcpy(client->fileName, fileName);
-	strcpy(client->cwd, folder);
+    strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
-	
-    char *folderName = basename(folder);
-    char *pos = strrchr (folder, '/');
-    char *parentFolder = strndup(folder, strlen(folder)-strlen(pos)+1);
+
+    char *folderName   = basename(folder);
+    char *pos          = strrchr(folder, '/');
+    char *parentFolder = strndup(folder, strlen(folder) - strlen(pos) + 1);
 
     if (vrt_checkdir(parentFolder, folderName)) {
         vrt_mkdir(parentFolder, folderName, 0775);
@@ -1031,29 +1027,29 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     if (parentFolder != NULL) free(parentFolder);
     if (folderName != NULL) free(folderName);
 
-	client->f = vrt_fopen(client->cwd, client->fileName, mode);
+    client->f = vrt_fopen(client->cwd, client->fileName, mode);
     if (!client->f) {
-        
+
         char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index+1, client->cwd, path, strerror(errno));
+        sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
     // init bytes counter
     client->bytesTransferred = 0;
-    
+
     int32_t result = prepare_data_connection(client, recv_to_file, client, endTransfer);
     if (result < 0) endTransfer(client);
-	nbFilesReceived++;
+    nbFilesReceived++;
     return result;
 }
 
-static int32_t ftp_STOR(client_t *client, char *path) {	
+static int32_t ftp_STOR(client_t *client, char *path) {
     char *openMode = "wb";
     if (client->restart_marker) {
         openMode = "r+";
     }
-    
+
     return stor_or_append(client, path, openMode);
 }
 
@@ -1067,9 +1063,9 @@ static int32_t ftp_REST(client_t *client, char *offset_str) {
     if (sscanf(offset_str, "%lli", &offset) < 1 || offset < 0) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    client->restart_marker = offset;
-    char msg[FTPMAXPATHLEN+100] = "";
-    sprintf(msg, "C[%d] restart position accepted (%lli) for %s", client->index+1, offset, client->fileName);
+    client->restart_marker        = offset;
+    char msg[FTPMAXPATHLEN + 100] = "";
+    sprintf(msg, "C[%d] restart position accepted (%lli) for %s", client->index + 1, offset, client->fileName);
     return write_reply(client, 350, msg);
 }
 
@@ -1093,8 +1089,8 @@ static int32_t ftp_SITE_CLEAR(client_t *client, char *rest UNUSED) {
 	from displaying skip/abort/retry type prompts.
 */
 static int32_t ftp_SITE_CHMOD(client_t *client, char *rest UNUSED) {
-    char msg[FTPMAXPATHLEN+50] = "";
-    sprintf(msg, "C[%d] CHMOD %s successfully", client->index+1, client->cwd);
+    char msg[FTPMAXPATHLEN + 50] = "";
+    sprintf(msg, "C[%d] CHMOD %s successfully", client->index + 1, client->cwd);
 
     return write_reply(client, 250, msg);
 }
@@ -1229,37 +1225,36 @@ static void cleanup_data_resources(client_t *client) {
     client->data_connection_callback_arg = NULL;
     client->data_connection_cleanup      = NULL;
     client->data_connection_timer        = 0;
-	
+
     client->f = NULL;
     strcpy(client->fileName, "");
-	client->bytesTransferred = -1;
-	
+    client->bytesTransferred = -1;
 }
 
-static uint8_t  getNbOfClientsConnected() {
+static uint8_t getNbOfClientsConnected() {
 
     uint32_t client_index;
-	uint8_t nbc = 0;
+    uint8_t nbc = 0;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
         if (clients[client_index] != NULL) nbc++;
-	}
+    }
     return nbc;
 }
 
 static void displayTransferSpeedStats() {
     if (nbSpeedMeasures != 0) {
-	    // compute end time
-	    endTime = OSGetTime();
+        // compute end time
+        endTime = OSGetTime();
         console_printf(" ");
         console_printf("============================================================");
-        console_printf("  Speed (MB/s) [min = %.2f, mean = %.2f, max = %.2f]", minTransferRate, sumAvgSpeed/(float)nbSpeedMeasures, maxTransferRate);
+        console_printf("  Speed (MB/s) [min = %.2f, mean = %.2f, max = %.2f]", minTransferRate, sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate);
         console_printf("  Files received : %d / sent : %d", nbFilesReceived, nbFilesSent);
         console_printf("  Time ellapsed = %" PRIu64 " sec", (endTime - startTime) * 4000ULL / BUS_SPEED);
         console_printf("============================================================");
 
         OSSleepTicks(OSSecondsToTicks(2));
-		// reset startTime
-	    startTime = OSGetTime();		
+        // reset startTime
+        startTime = OSGetTime();
     }
 }
 
@@ -1288,88 +1283,88 @@ void cleanup_ftp() {
         if (client) {
             write_reply(client, 421, "Service not available, closing control connection.");
             cleanup_client(client);
-		}
+        }
     }
 }
 
 static bool process_accept_events(int32_t server) {
     // if the max connections number is not reached, treat incomming connections
     if (num_clients < MAX_CLIENTS) {
-	    int32_t peer;
-	    struct sockaddr_in client_address;
-	    socklen_t addrlen = sizeof(client_address);
-	    while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
-	        if (peer < 0) {
-	            console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
-	            return false;
-	        }
+        int32_t peer;
+        struct sockaddr_in client_address;
+        socklen_t addrlen = sizeof(client_address);
+        while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
+            if (peer < 0) {
+                console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
+                return false;
+            }
 
-	        console_printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
+            console_printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
 
-	        if (num_clients == MAX_CLIENTS-1) {
-	            console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
-	            network_close(peer);
-	            return true;
-	        }
+            if (num_clients == MAX_CLIENTS - 1) {
+                console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
+                network_close(peer);
+                return true;
+            }
 
-	        client_t *client = (client_t *) memalign(64, sizeof(client_t));
-	        if (!client) {
-	            console_printf("Could not allocate memory for client state, not accepting client.\n");
-	            network_close(peer);
-	            return true;
-	        }
-	        client->socket              = peer;
-	        client->representation_type = 'A';
-	        client->passive_socket      = -1;
-	        client->data_socket         = -1;
-	        strcpy(client->cwd, "/");
-	        *client->pending_rename              = '\0';
-	        client->restart_marker               = 0;
-	        client->authenticated                = false;
-	        client->offset                       = 0;
-	        client->data_connection_connected    = false;
-	        client->data_callback                = NULL;
-	        client->data_connection_callback_arg = NULL;
-	        client->data_connection_cleanup      = NULL;
-	        client->data_connection_timer        = 0;
-		    client->f = NULL;
-		    strcpy(client->fileName, "");
-			client->bytesTransferred = -1;
-		    client->speed = 0;
-			client->index = 0;
-		
-	        memcpy(&client->address, &client_address, sizeof(client_address));
-		
-			// send stats to client
-			uint8_t nbc = getNbOfClientsConnected();
-	        char msg[FTPMAXPATHLEN] = "";
-			if (nbc == 0) {
-		        sprintf(msg, "ftpiiu [%d connections max, %d sec timeout]", MAX_CLIENTS-1, FTP_CONNECTION_TIMEOUT);
-			} else {
-				// compute end time
-			    endTime = OSGetTime();
-				uint64_t duration = (endTime - startTime) * 4000ULL / BUS_SPEED;
+            client_t *client = (client_t *) memalign(64, sizeof(client_t));
+            if (!client) {
+                console_printf("Could not allocate memory for client state, not accepting client.\n");
+                network_close(peer);
+                return true;
+            }
+            client->socket              = peer;
+            client->representation_type = 'A';
+            client->passive_socket      = -1;
+            client->data_socket         = -1;
+            strcpy(client->cwd, "/");
+            *client->pending_rename              = '\0';
+            client->restart_marker               = 0;
+            client->authenticated                = false;
+            client->offset                       = 0;
+            client->data_connection_connected    = false;
+            client->data_callback                = NULL;
+            client->data_connection_callback_arg = NULL;
+            client->data_connection_cleanup      = NULL;
+            client->data_connection_timer        = 0;
+            client->f                            = NULL;
+            strcpy(client->fileName, "");
+            client->bytesTransferred = -1;
+            client->speed            = 0;
+            client->index            = 0;
 
-		        sprintf(msg, "ftpiiu [%d/%d connections, stats (MB/s): min = %.2f, mean = %.2f, max = %.2f], files received: %d / sent: %d, transfers done in %" PRIu64 "sec]", nbc-1, MAX_CLIENTS-1, minTransferRate, sumAvgSpeed/(float)nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration/1000);
-			}		
-	        if (write_reply(client, 220, msg) < 0) {
-	            console_printf("Error writing greeting.\n");
-	            network_close_blocking(peer);
-	            free(client);
-	            client = NULL;
-	        } else {
-		        int client_index;
-	            for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-	                if (!clients[client_index]) {
-	                    clients[client_index] = client;
-						client->index = client_index;
-	                    break;
-	                }
-	            }
-	            num_clients++;
-	        }
-	    }
-	}
+            memcpy(&client->address, &client_address, sizeof(client_address));
+
+            // send stats to client
+            uint8_t nbc             = getNbOfClientsConnected();
+            char msg[FTPMAXPATHLEN] = "";
+            if (nbc == 0) {
+                sprintf(msg, "ftpiiu [%d connections max, %d sec timeout]", MAX_CLIENTS - 1, FTP_CONNECTION_TIMEOUT);
+            } else {
+                // compute end time
+                endTime           = OSGetTime();
+                uint64_t duration = (endTime - startTime) * 4000ULL / BUS_SPEED;
+
+                sprintf(msg, "ftpiiu [%d/%d connections, stats (MB/s): min = %.2f, mean = %.2f, max = %.2f], files received: %d / sent: %d, transfers done in %" PRIu64 "sec]", nbc - 1, MAX_CLIENTS - 1, minTransferRate, sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration / 1000);
+            }
+            if (write_reply(client, 220, msg) < 0) {
+                console_printf("Error writing greeting.\n");
+                network_close_blocking(peer);
+                free(client);
+                client = NULL;
+            } else {
+                int client_index;
+                for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+                    if (!clients[client_index]) {
+                        clients[client_index] = client;
+                        client->index         = client_index;
+                        break;
+                    }
+                }
+                num_clients++;
+            }
+        }
+    }
     return true;
 }
 
@@ -1401,16 +1396,16 @@ static void process_data_events(client_t *client) {
             console_printf("Connected to client!  Transferring data...\n");
         } else if (OSGetTime() > client->data_connection_timer) {
             result = -2;
-			
-	        char msg[2*FTPMAXPATHLEN] = "";
+
+            char msg[2 * FTPMAXPATHLEN] = "";
             if (strlen(client->fileName) == 0) {
-                sprintf(msg, "C[%d] timed out when connecting", client->index+1);
+                sprintf(msg, "C[%d] timed out when connecting", client->index + 1);
             } else {
-                sprintf(msg, "C[%d] timed out when connecting for transferring %s", client->index+1, client->fileName);
+                sprintf(msg, "C[%d] timed out when connecting for transferring %s", client->index + 1, client->fileName);
             }
 
-	        write_reply(client, 425, msg);
-						
+            write_reply(client, 425, msg);
+
             console_printf("%s.\n", msg);
         }
     } else {
@@ -1419,27 +1414,26 @@ static void process_data_events(client_t *client) {
         if (client->f != NULL && result == 0 && client->bytesTransferred > 0) {
 
             // compute transfer speed
-            uint64_t duration = (OSGetTime() - (client->data_connection_timer - FTP_CONNECTION_TIMEOUT*1000000)) * 4000ULL / BUS_SPEED;
+            uint64_t duration = (OSGetTime() - (client->data_connection_timer - FTP_CONNECTION_TIMEOUT * 1000000)) * 4000ULL / BUS_SPEED;
             if (duration != 0) {
 
                 // set a threshold on file size to consider file for average calculation
                 // take only files larger than the network buffer used
 
-                if (client->bytesTransferred >= 2*DEFAULT_NET_BUFFER_SIZE) {
-                    client->speed = (float)(client->bytesTransferred) / (float)(duration*1000);
+                if (client->bytesTransferred >= 2 * DEFAULT_NET_BUFFER_SIZE) {
+                    client->speed = (float) (client->bytesTransferred) / (float) (duration * 1000);
 
-                        console_printf("> C[%d] %s transferred at %.2f MB/s (%d bytes)", client->index+1, client->fileName, client->speed, client->bytesTransferred);
+                    console_printf("> C[%d] %s transferred at %.2f MB/s (%d bytes)", client->index + 1, client->fileName, client->speed, client->bytesTransferred);
                 }
             }
         }
-        
     }
 
     if (result <= 0 && result != -EAGAIN) {
         if (result < 0) {
             if (result != -2) {
                 char msg[FTPMAXPATHLEN] = "";
-                sprintf(msg, "C[%d] to be closed : error = %d (%s)", client->index+1, result, strerror(result));
+                sprintf(msg, "C[%d] to be closed : error = %d (%s)", client->index + 1, result, strerror(result));
                 write_reply(client, 520, msg);
             }
         } else {
@@ -1447,21 +1441,20 @@ static void process_data_events(client_t *client) {
             char msg[FTPMAXPATHLEN + 80] = "";
             if (client->f != NULL) {
                 if (client->speed != 0) {
-                    sprintf(msg, "C[%d] %s transferred successfully %.0fKB/s", client->index+1, client->fileName, client->speed*1000);
+                    sprintf(msg, "C[%d] %s transferred successfully %.0fKB/s", client->index + 1, client->fileName, client->speed * 1000);
 
-		            if (client->speed > maxTransferRate) maxTransferRate = client->speed;
-		            if (client->speed < minTransferRate) minTransferRate = client->speed;
-		            sumAvgSpeed += client->speed;
-					
-		            // increment nbAvgFiles and take speed into account for mean calculation
-		            nbSpeedMeasures++;
+                    if (client->speed > maxTransferRate) maxTransferRate = client->speed;
+                    if (client->speed < minTransferRate) minTransferRate = client->speed;
+                    sumAvgSpeed += client->speed;
+
+                    // increment nbAvgFiles and take speed into account for mean calculation
+                    nbSpeedMeasures++;
 
                 } else {
-                    sprintf(msg, "C[%d] %s transferred successfully", client->index+1, client->fileName);
-				}
-            }
-            else
-                sprintf(msg, "C[%d] command executed successfully", client->index+1);
+                    sprintf(msg, "C[%d] %s transferred successfully", client->index + 1, client->fileName);
+                }
+            } else
+                sprintf(msg, "C[%d] command executed successfully", client->index + 1);
 
             write_reply(client, 226, msg);
         }
@@ -1481,7 +1474,7 @@ static void process_control_events(client_t *client) {
         char *offset_buf = client->buf + client->offset;
         if ((bytes_read = network_read(client->socket, offset_buf, FTP_BUFFER_SIZE - 1 - client->offset)) < 0) {
             if (bytes_read != -EAGAIN) {
-                console_printf("C[%d] read error %i occurred, closing client.\n", client->index+1, bytes_read);
+                console_printf("C[%d] read error %i occurred, closing client.\n", client->index + 1, bytes_read);
                 goto recv_loop_end;
             }
             return;
@@ -1492,7 +1485,7 @@ static void process_control_events(client_t *client) {
         client->buf[client->offset] = '\0';
 
         if (strchr(offset_buf, '\0') != (client->buf + client->offset)) {
-            console_printf("C[%d] received a null byte from client, closing connection ;-)\n", client->index+1); // i have decided this isn't allowed =P
+            console_printf("C[%d] received a null byte from client, closing connection ;-)\n", client->index + 1); // i have decided this isn't allowed =P
             goto recv_loop_end;
         }
 
@@ -1501,7 +1494,7 @@ static void process_control_events(client_t *client) {
         for (next = client->buf; (end = strstr(next, CRLF)) && !client->data_callback; next = end + CRLF_LENGTH) {
             *end = '\0';
             if (strchr(next, '\n')) {
-                console_printf("C[%d] received a line-feed from client without preceding carriage return, closing connection ;-)\n", client->index+1); // i have decided this isn't allowed =P
+                console_printf("C[%d] received a line-feed from client without preceding carriage return, closing connection ;-)\n", client->index + 1); // i have decided this isn't allowed =P
                 goto recv_loop_end;
             }
 
@@ -1532,42 +1525,42 @@ recv_loop_end:
 bool process_ftp_events(int32_t server) {
     bool network_down = !process_accept_events(server);
     if (!network_down) {
-	    int client_index;
-	    uint8_t nbActiveClients = 0;
-		
-	    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-	        client_t *client = clients[client_index];
-	        if (client) {
-	            nbActiveClients++;
-	            if (client->data_callback) {
-	                process_data_events(client);
-					
-	            } else {
-	                process_control_events(client);
-	            }
-	        }
-		}
-		
-		
+        int client_index;
+        uint8_t nbActiveClients = 0;
+
+        for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+            client_t *client = clients[client_index];
+            if (client) {
+                nbActiveClients++;
+                if (client->data_callback) {
+                    process_data_events(client);
+
+                } else {
+                    process_control_events(client);
+                }
+            }
+        }
+
+
         OSSleepTicks(OSMillisecondsToTicks(5));
-		
-		
-		if (nbActiveClients <= 1)  {
-		
-			if (lastSumAvgSpeed != sumAvgSpeed) {
-				// last stats saved are outdated
-	            displayTransferSpeedStats();
-				// save last stats
-	            lastSumAvgSpeed = sumAvgSpeed;
-	        }
-		
-			if (nbActiveClients == 0 ) {
-				OSSleepTicks(OSSecondsToTicks(2));
-				// reset startTime
-			    startTime = OSGetTime();
-			}
-		}
-	}
-	
+
+
+        if (nbActiveClients <= 1) {
+
+            if (lastSumAvgSpeed != sumAvgSpeed) {
+                // last stats saved are outdated
+                displayTransferSpeedStats();
+                // save last stats
+                lastSumAvgSpeed = sumAvgSpeed;
+            }
+
+            if (nbActiveClients == 0) {
+                OSSleepTicks(OSSecondsToTicks(2));
+                // reset startTime
+                startTime = OSGetTime();
+            }
+        }
+    }
+
     return network_down;
 }

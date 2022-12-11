@@ -34,7 +34,7 @@ misrepresented as being the original software.
 
 #include "net.h"
 
-#define SO_RUSRBUF          0x10000 // enable userspace socket buffer
+#define SO_RUSRBUF 0x10000 // enable userspace socket buffer
 
 extern uint32_t hostIpAddress;
 
@@ -96,7 +96,7 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 
     // Activate WinScale
     setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
-/*
+    /*
     // try socket memory optimization
 	int retries = 0; 
     while (1) {
@@ -106,7 +106,7 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 			break;			
         OSSleepTicks(OSMillisecondsToTicks(10));
     }
-*/    
+*/
     // Set non blocking mode
     set_blocking(sock, false);
 
