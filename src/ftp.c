@@ -46,7 +46,6 @@ static const int32_t EQUIT        = 696969;
 static const char *CRLF           = "\r\n";
 static const uint32_t CRLF_LENGTH = 2;
 
-static uint8_t num_clients   = 0;
 static uint16_t passive_port = 1024;
 static char *password        = NULL;
 
@@ -73,6 +72,39 @@ static float sumAvgSpeed = 0;
 static float lastSumAvgSpeed = 0;
 // number of measures used for average computation
 static uint32_t nbSpeedMeasures = 0;
+
+static void resetClient(client_t *client) {
+
+    client->data_socket                  = -1;
+    client->restart_marker               = 0;
+    client->data_connection_connected    = false;
+    client->data_callback                = NULL;
+    client->data_connection_callback_arg = NULL;
+    client->data_connection_cleanup      = NULL;
+    client->data_connection_timer        = 0;
+    client->f                            = NULL;
+    strcpy(client->fileName, "");
+}
+
+// initialize the client without setting the index data member
+static void initClient(client_t *client) {
+
+    resetClient(client);
+
+    client->representation_type = 'A';
+    client->passive_socket      = -1;
+    client->authenticated       = false;
+    client->offset              = 0;
+    strcpy(client->buf, "");
+    strcpy(client->cwd, "/");
+    strcpy(client->pending_rename, "");
+
+    client->passive_socket = -1;
+    client->socket         = -1;
+
+    client->speed = 0;
+}
+
 
 int32_t create_server(uint16_t port) {
 
@@ -826,7 +858,7 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
             client->data_callback                = callback;
             client->data_connection_callback_arg = arg;
             client->data_connection_cleanup      = cleanup;
-
+            // timestamp uint64 in nanoseconds
             client->data_connection_timer = OSGetTime() + (OSTime) (FTP_SERVER_CONNECTION_TIMEOUT) *1000000000;
         }
     }
@@ -978,9 +1010,11 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     }
 
     int fd = fileno(client->f);
+    // if client->restart_marker <> 0; check its value
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
         int32_t lseek_error = errno;
         fclose(client->f);
+        // reset the marker to 0
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(lseek_error));
     }
@@ -1037,6 +1071,7 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     return result;
 }
 
+// called by client when replacing a file
 static int32_t ftp_STOR(client_t *client, char *path) {
 
     client->restart_marker = 0;
@@ -1044,6 +1079,7 @@ static int32_t ftp_STOR(client_t *client, char *path) {
     return stor_or_append(client, path, "wb");
 }
 
+// called by client when resuming a file
 static int32_t ftp_APPE(client_t *client, char *path) {
 
     return stor_or_append(client, path, "ab");
@@ -1206,37 +1242,23 @@ static int32_t process_command(client_t *client, char *cmd_line) {
 }
 
 static void cleanup_data_resources(client_t *client) {
+
+    // close the data_socket
     if (client->data_socket >= 0 && client->data_socket != client->passive_socket) {
         network_close_blocking(client->data_socket);
     }
-    client->data_socket               = -1;
-    client->data_connection_connected = false;
-    client->data_callback             = NULL;
+
+    // transfer call back
     if (client->data_connection_cleanup) {
         client->data_connection_cleanup(client->data_connection_callback_arg);
     }
-    client->data_connection_callback_arg = NULL;
-    client->data_connection_cleanup      = NULL;
-    client->data_connection_timer        = 0;
 
-    client->f = NULL;
-    strcpy(client->fileName, "");
-    client->bytesTransferred = -1;
+    resetClient(client);
 }
 
-static uint8_t getNbOfClientsConnected() {
-
-    uint32_t client_index;
-    uint8_t nbc = 0;
-    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-        if (clients[client_index] != NULL) nbc++;
-    }
-    return nbc;
-}
 
 static void displayTransferSpeedStats() {
     if (nbSpeedMeasures != 0) {
-        // compute end time
         console_printf(" ");
         console_printf("============================================================");
         console_printf("  Speed (MB/s) [min = %.2f, mean = %.2f, max = %.2f]", minTransferRate, sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate);
@@ -1254,106 +1276,67 @@ static void cleanup_client(client_t *client) {
     console_printf("Client %d disconnected.\n", client->index + 1);
 
     close_passive_socket(client);
-    int client_index;
-    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-        if (clients[client_index] == client) {
-            clients[client_index] = NULL;
-            break;
-        }
-    }
-    free(client);
-    client = NULL;
-    num_clients--;
-    console_printf("Client disconnected.\n");
+    initClient(client);
 }
 
 void cleanup_ftp() {
     int client_index;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-        client_t *client = clients[client_index];
-        if (client) {
-            write_reply(client, 421, "Service not available, closing control connection.");
-            cleanup_client(client);
-        }
+
+        write_reply(clients[client_index], 421, "Service not available, closing control connection.");
+
+
+
+        cleanup_client(clients[client_index]);
     }
 }
 
 static bool process_accept_events(int32_t server) {
-    // if the max connections number is not reached, treat incomming connections
-    if (num_clients < MAX_CLIENTS) {
-        int32_t peer;
-        struct sockaddr_in client_address;
-        socklen_t addrlen = sizeof(client_address);
-        while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
-            if (peer < 0) {
-                console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
-                return false;
-            }
+    int32_t peer;
+    struct sockaddr_in client_address;
+    socklen_t addrlen = sizeof(client_address);
+    while ((peer = network_accept(server, (struct sockaddr *) &client_address, &addrlen)) != -EAGAIN) {
+        if (peer < 0) {
+            console_printf("Error accepting connection: [%i] %s\n", -peer, strerror(-peer));
+            return false;
+        }
 
-            console_printf("Accepted connection from %s!\n", inet_ntoa(client_address.sin_addr));
+        // search for the first available connections (socket == -1)
+        int client_index;
+        for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
 
-            if (num_clients == MAX_CLIENTS - 1) {
-                console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
-                network_close(peer);
-                return true;
-            }
+            if (clients[client_index]->socket == -1) {
 
-            client_t *client = (client_t *) memalign(64, sizeof(client_t));
-            if (!client) {
-                console_printf("Could not allocate memory for client state, not accepting client.\n");
-                network_close(peer);
-                return true;
-            }
-            client->socket              = peer;
-            client->representation_type = 'A';
-            client->passive_socket      = -1;
-            client->data_socket         = -1;
-            strcpy(client->cwd, "/");
-            *client->pending_rename              = '\0';
-            client->restart_marker               = 0;
-            client->authenticated                = false;
-            client->offset                       = 0;
-            client->data_connection_connected    = false;
-            client->data_callback                = NULL;
-            client->data_connection_callback_arg = NULL;
-            client->data_connection_cleanup      = NULL;
-            client->data_connection_timer        = 0;
-            client->f                            = NULL;
-            strcpy(client->fileName, "");
-            client->bytesTransferred = -1;
-            client->speed            = 0;
-            client->index            = 0;
+                // use this connection C[client_index]
+                clients[client_index]->socket = peer;
+                memcpy(&clients[client_index]->address, &client_address, sizeof(client_address));
 
-            memcpy(&client->address, &client_address, sizeof(client_address));
+                char msg[FTPMAXPATHLEN] = "";
+                if ((client_index == 0) && (nbFilesSent == 0) && (nbFilesReceived == 0)) {
+                    // send recommendations to client
+                    sprintf(msg, "ftpiiu : %d connections max (%d simulatneous transfers), %d sec for timeout", MAX_CLIENTS, MAX_CLIENTS - 1, FTP_CLIENT_CONNECTION_TIMEOUT);
+                } else {
+                    // send recommendations send stats to client
 
-            // send stats to client
-            uint8_t nbc             = getNbOfClientsConnected();
-            char msg[FTPMAXPATHLEN] = "";
-            if (nbc == 0) {
-                sprintf(msg, "ftpiiu [%d connections max, %d sec timeout]", MAX_CLIENTS - 1, FTP_CLIENT_CONNECTION_TIMEOUT);
-            } else {
-                // compute end time
-                uint64_t duration = (OSGetTime() - startTime) * 4000ULL / BUS_SPEED;
+                    // compute end time
+                    uint64_t duration = (OSGetTime() - startTime) * 4000ULL / BUS_SPEED;
 
-                sprintf(msg, "ftpiiu [%d/%d connections, stats (MB/s): min = %.2f, mean = %.2f, max = %.2f], files received: %d / sent: %d, transfers done in %" PRIu64 "sec]", nbc - 1, MAX_CLIENTS - 1, minTransferRate, sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration / 1000);
-            }
-            if (write_reply(client, 220, msg) < 0) {
-                console_printf("Error writing greeting.\n");
-                network_close_blocking(peer);
-                free(client);
-                client = NULL;
-            } else {
-                int client_index;
-                for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-                    if (!clients[client_index]) {
-                        clients[client_index] = client;
-                        client->index         = client_index;
-                        break;
-                    }
+                    sprintf(msg, "Transfers in MB/s: min=%.2f,  mean=%.2f,  max=%.2f | received:%d / sent:%d | time ellapsed %" PRIu64 "s", minTransferRate, nbSpeedMeasures == 0 ? 0.0 : sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration / 1000);
                 }
-                num_clients++;
+
+                if (write_reply(clients[client_index], 220, msg) < 0) {
+                    network_close_blocking(peer);
+                    clients[client_index]->socket = -1;
+                    return false;
+                } else {
+                    console_printf("C[%d] connected to %s!\n", client_index + 1, inet_ntoa(client_address.sin_addr));
+                    clients[client_index]->index = client_index;
+                    return true;
+                }
             }
         }
+        // here, max of connections are in use
+        console_printf("Maximum of %u clients reached, not accepting client.\n", MAX_CLIENTS);
     }
     return true;
 }
@@ -1544,15 +1527,16 @@ bool process_ftp_events(int32_t server) {
         int client_index;
         uint8_t nbActiveClients = 0;
 
+        // Treat all actives clients/connections
         for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
-            client_t *client = clients[client_index];
-            if (client) {
+            // if client is connected
+            if (clients[client_index]->socket != -1) {
                 nbActiveClients++;
-                if (client->data_callback) {
-                    process_data_events(client);
+                if (clients[client_index]->data_callback) {
 
+                    process_data_events(clients[client_index]);
                 } else {
-                    process_control_events(client);
+                    process_control_events(clients[client_index]);
                 }
             }
         }
@@ -1571,6 +1555,7 @@ bool process_ftp_events(int32_t server) {
             }
 
             if (nbActiveClients == 0) {
+            // sleep 2 sec before listening again
                 OSSleepTicks(OSSecondsToTicks(2));
             }
         }
