@@ -31,24 +31,28 @@ misrepresented as being the original software.
 #include <stdio.h>
 
 // to avoid warnings
-#define UNUSED                  __attribute__((unused))
+#define UNUSED                        __attribute__((unused))
+
+// network allowed 8 simultaneuous connections max (before  getting errors)
+// 8 transfers + 1 browsing connection = 9
+#define MAX_CLIENTS                   9
 
 // Connection time out in seconds
-// set timeout to 90s
-// (when adding a lot of files, server may take more than 60s before responding)
-#define FTP_CONNECTION_TIMEOUT  90
-
-// size of the message sent to clients
-#define FTP_BUFFER_SIZE         1024
-
-// max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
-#define FTPMAXPATHLEN           256
+// set timeout to 50sec (server can take more than 40 sec to respond when you drag many files from client)
+#define FTP_SERVER_CONNECTION_TIMEOUT 50
+#define FTP_CLIENT_CONNECTION_TIMEOUT FTP_SERVER_CONNECTION_TIMEOUT + 10
 
 // number of reties on socket operations
-#define FTP_RETRIES_NUMBER      12
+#define FTP_RETRIES_NUMBER            MAX_CLIENTS * 2
+
+// size of the message sent to clients
+#define FTP_BUFFER_SIZE               1024
+
+// max length for string (whole line send to client must be lower than FTP_BUFFER_SIZE)
+#define FTPMAXPATHLEN                 256
 
 // default socket buffer size (max of value than can be set with setsockopt on SND/RCV buffers)
-#define DEFAULT_NET_BUFFER_SIZE (128 * 1024)
+#define DEFAULT_NET_BUFFER_SIZE       (128 * 1024)
 
 #ifdef __cplusplus
 extern "C" {

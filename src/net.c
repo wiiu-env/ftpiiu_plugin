@@ -24,17 +24,19 @@ misrepresented as being the original software.
 #include "main.h"
 #include <coreinit/thread.h>
 #include <malloc.h>
+#include <netinet/tcp.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
+#define MIN(x, y)      ((x) < (y) ? (x) : (y))
 
+#define SO_REUSESOCK   0x0200 // allow reuse of socket in TWAIT state
+#define SO_NOSLOWSTART 0x4000 // suppress slowstart
 #include "net.h"
 
-#define SO_RUSRBUF 0x10000 // enable userspace socket buffer
 
 extern uint32_t hostIpAddress;
 
@@ -70,10 +72,10 @@ static bool retry(int32_t socketError) {
     // retry
     if (socketError == -EINPROGRESS ||
         socketError == -EALREADY ||
+        socketError == -ENOMEM ||
         socketError == -EBUSY ||
         socketError == -ETIME ||
         socketError == -ECONNREFUSED ||
-        socketError == -ECONNABORTED ||
         socketError == -ETIMEDOUT ||
         socketError == -EMFILE ||
         socketError == -ENFILE ||
@@ -90,23 +92,41 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
         return (err < 0) ? err : sock;
     }
 
-    uint32_t enable = 1;
-    // reuse (avoid "Not enought Space" error when transferring a large numbers of files)
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable));
+    // enable
+    uint32_t enabled = 1;
 
-    // Activate WinScale
-    setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enable, sizeof(enable));
-    /*
-    // try socket memory optimization
-	int retries = 0; 
-    while (1) {
-        if (setsockopt(sock, SOL_SOCKET, SO_RUSRBUF, &enable, sizeof(enable)) == 0)
-            break;
-		if (retries++ > FTP_RETRIES_NUMBER*4)
-			break;			
-        OSSleepTicks(OSMillisecondsToTicks(10));
-    }
-*/
+    // reuse addr and port
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
+
+    // reuse sockets
+    setsockopt(sock, SOL_SOCKET, SO_REUSESOCK, &enabled, sizeof(enabled));
+
+    // Disable slowstart
+    setsockopt(sock, SOL_SOCKET, SO_NOSLOWSTART, &enabled, sizeof(enabled));
+
+    // To raise the I/O buffers size : activate WinScale
+    setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enabled, sizeof(enabled));
+
+    // Activate TCP SAck
+    setsockopt(sock, SOL_SOCKET, SO_TCPSACK, &enabled, sizeof(enabled));
+
+    // Activate TCP nodelay
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
+
+    // disable
+    uint32_t disabled = 0;
+
+    // Disable TCP keepalive
+    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &disabled, sizeof(disabled));
+
+    // SO_LINGER options (with timeout 0).
+    // connection will close immediately after closing your program; and next restart will be able to bind again
+    struct linger lin;
+    lin.l_onoff  = 0;
+    lin.l_linger = 0;
+    setsockopt(sock, SOL_SOCKET, SO_LINGER, (const char *) &lin, sizeof(int));
+
+
     // Set non blocking mode
     set_blocking(sock, false);
 
