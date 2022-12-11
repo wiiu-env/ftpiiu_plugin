@@ -33,6 +33,7 @@ misrepresented as being the original software.
 
 #define MIN(x, y)      ((x) < (y) ? (x) : (y))
 
+// socket options
 #define SO_REUSESOCK   0x0200 // allow reuse of socket in TWAIT state
 #define SO_NOSLOWSTART 0x4000 // suppress slowstart
 #include "net.h"
@@ -298,22 +299,17 @@ int32_t send_from_file(int32_t s, client_t *client) {
     // return code
     int32_t result = 0;
 
-
     // max value = DEFAULT_NET_BUFFER_SIZE
     int sndBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
-    // (buffer size = 2*DEFAULT_NET_BUFFER_SIZE)
-    int dlBufferSize          = 2 * sndBuffSize;
-    char WUT_ALIGNAS(64) *buf = (char *) memalign(0x40, dlBufferSize);
-    if (!buf) {
-        return -ENOMEM;
-    }
+    // (client->transferBuffer size = TRANSFER_BUFFER_SIZE)
+    int dlBufferSize = TRANSFER_BUFFER_SIZE;
 
     int32_t bytes_read = dlBufferSize;
     while (bytes_read) {
 
-        bytes_read = fread(buf, 1, dlBufferSize, client->f);
+        bytes_read = fread(client->transferBuffer, 1, dlBufferSize, client->f);
         if (bytes_read == 0) {
             // SUCCESS, no more to write
             result = 0;
@@ -328,7 +324,7 @@ int32_t send_from_file(int32_t s, client_t *client) {
             while (remaining) {
 
             send_again:
-                result = network_write(s, buf, MIN(remaining, dlBufferSize));
+                result = network_write(s, client->transferBuffer, MIN(remaining, dlBufferSize));
 
                 if (result < 0) {
                     if (retry(result)) {
@@ -344,9 +340,9 @@ int32_t send_from_file(int32_t s, client_t *client) {
                     break;
                 } else {
 
-
                     // data block sent sucessfully, continue
                     client->bytesTransferred += result;
+                    client->transferCallback = result;
                     remaining -= result;
                 }
             }
@@ -369,8 +365,8 @@ int32_t send_from_file(int32_t s, client_t *client) {
             }
         }
     }
-    free(buf);
-    buf = NULL;
+
+    client->transferCallback = result;
 
     return result;
 }
@@ -383,27 +379,18 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
-
+    // (client->transferBuffer size = TRANSFER_BUFFER_SIZE)
     // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
-    uint32_t chunckSize = rcvBuffSize;
-
-    // using a buffer size >= 2*rcvBuffSize will handle the overflow
-    // (buffer size = 2*DEFAULT_NET_BUFFER_SIZE)
-    char WUT_ALIGNAS(64) *buf = (char *) memalign(0x40, 2 * rcvBuffSize);
-    if (!buf) {
-        return -ENOMEM;
-    }
-
-    // Not perfect because it's not aligned, but with the way fclose is called
-    // using a custom buffer is annoying to clean up properly
-    setvbuf(client->f, NULL, _IOFBF, chunckSize);
+    // use the max size of the preallocated buffer minus the max overflow
+    // Note that this size is also used to setvbuf in ftp.c
+    uint32_t chunckSize = TRANSFER_BUFFER_SIZE - 2 * rcvBuffSize;
 
     int32_t bytes_read   = chunckSize;
     uint32_t retryNumber = 0;
 
     while (bytes_read) {
     read_again:
-        bytes_read = network_readChunk(s, buf, chunckSize);
+        bytes_read = network_readChunk(s, client->transferBuffer, chunckSize);
         if (bytes_read == 0) {
             result = 0;
             break;
@@ -424,18 +411,19 @@ int32_t recv_to_file(int32_t s, client_t *client) {
             // bytes_received > 0
 
             // write bytes_received to f
-            result = fwrite(buf, 1, bytes_read, client->f);
+            result = fwrite(client->transferBuffer, 1, bytes_read, client->f);
             if ((result < 0 && result < bytes_read) || ferror(client->f) != 0) {
                 // error when writing f
                 result = -100;
                 break;
             } else {
                 client->bytesTransferred += result;
+                client->transferCallback = result;
             }
         }
     }
-    free(buf);
-    buf = NULL;
+    client->transferCallback = result;
+
 
     return result;
 }

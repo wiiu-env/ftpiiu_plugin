@@ -40,6 +40,9 @@ extern "C" {
 
 #include "ftp.h"
 
+// size of the transfer buffer (preallocated)
+#define TRANSFER_BUFFER_SIZE DEFAULT_NET_BUFFER_SIZE * 8
+
 #if 0
 void initialise_network();
 #endif

@@ -50,9 +50,9 @@ static uint16_t passive_port = 1024;
 static char *password        = NULL;
 
 // for benchmarking purpose
-static uint64_t startTime      = 0;
-static int32_t nbFilesReceived = 0;
-static int32_t nbFilesSent     = 0;
+static uint64_t startTime               = 0;
+static volatile int32_t nbFilesReceived = 0;
+static volatile int32_t nbFilesSent     = 0;
 
 // priority of curent thread (when starting server)
 static int32_t mainPriority = 16;
@@ -65,6 +65,8 @@ static client_t WUT_ALIGNAS(64) * clients[MAX_CLIENTS] = {NULL};
 // max and min transfer rate speeds in MBs
 static float maxTransferRate = -9999;
 static float minTransferRate = 9999;
+// to avoid false speed estimation
+static int maxSpeedPerTransfer = 6;
 
 // sum of average speeds
 static float sumAvgSpeed = 0;
@@ -72,6 +74,9 @@ static float sumAvgSpeed = 0;
 static float lastSumAvgSpeed = 0;
 // number of measures used for average computation
 static uint32_t nbSpeedMeasures = 0;
+
+// counters for active transfer on cpu (to set the priority of thread to launch)
+static volatile uint8_t nbTransferOnCpu[3] = {0, 0, 0};
 
 static void resetClient(client_t *client) {
 
@@ -84,6 +89,9 @@ static void resetClient(client_t *client) {
     client->data_connection_timer        = 0;
     client->f                            = NULL;
     strcpy(client->fileName, "");
+    strcpy(client->uploadFilePath, "");
+    client->bytesTransferred = -1;
+    client->transferCallback = -EAGAIN;
 }
 
 // initialize the client without setting the index data member
@@ -138,6 +146,36 @@ int32_t create_server(uint16_t port) {
         return ret;
     }
 
+    uint32_t client_index;
+
+    for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
+
+        // allocate clients[client_index]
+        clients[client_index] = (client_t *) memalign(64, sizeof(client_t));
+        if (!clients[client_index]) {
+            console_printf("ERROR when allocating clients[%d]", client_index);
+            return -ENOMEM;
+        }
+        initClient(clients[client_index]);
+
+        // allocate the transfer thread
+        clients[client_index]->transferThread = (OSThread *) memalign(32, sizeof(OSThread));
+        if (!clients[client_index]->transferThread) {
+            console_printf("ERROR when allocating transferThread [%d]", client_index);
+            return -ENOMEM;
+        }
+
+        // allocate the transfer buffer
+        clients[client_index]->transferBuffer = (char *) memalign(64, TRANSFER_BUFFER_SIZE);
+        if (!clients[client_index]->transferBuffer) {
+            console_printf("ERROR when allocating transferThread [%d]", client_index);
+            return -ENOMEM;
+        }
+
+        clients[client_index]->index = client_index;
+    }
+
+
     // compute start time
     startTime = OSGetTime();
 
@@ -164,6 +202,125 @@ static bool compare_ftp_password(char *password_attempt) {
     return !password || !strcmp((char *) password, password_attempt);
 }
 
+
+// Main of transfer Threads
+int launchTransfer(int argc UNUSED, const char **argv) {
+
+    int32_t result   = -101;
+    client_t *client = (client_t *) argv;
+
+    if (strlen(client->uploadFilePath) == 0) {
+        result = send_from_file(client->data_socket, client);
+        nbFilesSent++;
+
+    } else {
+        result = recv_to_file(client->data_socket, client);
+        nbFilesReceived++;
+    }
+
+    return result;
+}
+
+// launch and monitor the transfer
+static int32_t transfer(int32_t data_socket UNUSED, client_t *client) {
+
+    int32_t result = -EAGAIN;
+
+    // on the very first call
+    if (client->bytesTransferred == -1) {
+
+        // init bytes counter
+        client->bytesTransferred = 0;
+        // init callback value
+        client->transferCallback = -EAGAIN;
+        // init speed to 0
+        client->speed = 0;
+
+        // client->index+1 = 1,8,9 => CPU2 (main loop, browsing connection => index+1=1)
+        enum OS_THREAD_ATTRIB cpu = OS_THREAD_ATTRIB_AFFINITY_CPU2;
+        // client->index+1 = 2,4,6 => CPU0
+        if (client->index == 1 || client->index == 3 || client->index == 5) cpu = OS_THREAD_ATTRIB_AFFINITY_CPU0;
+        // client->index+1 = 3,5,7 => CPU1
+        if (client->index == 2 || client->index == 4 || client->index == 6) cpu = OS_THREAD_ATTRIB_AFFINITY_CPU1;
+
+        // default priority (lowest) = priority of the the first thread launch on each CPUs
+        int priority = mainPriority + 6;
+        // update the priority in function of the number of active threads (active transfers) on the CPU used
+        if (cpu == OS_THREAD_ATTRIB_AFFINITY_CPU0) {
+            if (nbTransferOnCpu[0] == 2) {
+                priority = mainPriority + 1;
+            } else {
+                if (nbTransferOnCpu[0] == 1) priority = mainPriority + 4;
+            }
+            nbTransferOnCpu[0]++;
+        } else {
+            if (cpu == OS_THREAD_ATTRIB_AFFINITY_CPU1) {
+                if (nbTransferOnCpu[1] == 1) {
+                    priority = mainPriority + 1;
+                } else {
+                    if (nbTransferOnCpu[1] == 0) priority = mainPriority + 4;
+                }
+                nbTransferOnCpu[1]++;
+            } else {
+                // CPU 2
+                if (nbTransferOnCpu[2] == 2) {
+                    priority = mainPriority + 1;
+                } else {
+                    if (nbTransferOnCpu[2] == 1) priority = mainPriority + 4;
+                }
+                nbTransferOnCpu[2]++;
+            }
+        }
+        // launching transfer thread
+        if (!OSCreateThread(client->transferThread, launchTransfer, 1, (char *) client, client->transferThreadStack + FTP_TRANSFER_STACK_SIZE, FTP_TRANSFER_STACK_SIZE, priority, cpu)) {
+            return -105;
+        }
+
+        OSResumeThread(client->transferThread);
+
+
+    } else {
+        // join the thread here only in case of error or the transfer is finished
+        if (client->bytesTransferred <= 0) {
+            OSJoinThread(client->transferThread, &result);
+        } else
+            result = client->transferCallback;
+    }
+
+    return result;
+}
+
+// this method is called on transfer success but also on transfer failure
+static int32_t endTransfer(client_t *client) {
+    int32_t result = 0;
+
+    // cancel thread if still running
+    if (!OSIsThreadTerminated(client->transferThread)) {
+        console_printf("C[%d] transfer of %s aborted !", client->index + 1, client->fileName);
+
+        OSCancelThread(client->transferThread);
+    }
+
+    // update nbTransferOnCpu
+    // client->index+1 = 1,8,9 => CPU2 (main loop, browsing connection => index+1=1)
+    // client->index+1 = 2,4,6 => CPU0
+    // client->index+1 = 3,5,7 => CPU1
+    if (client->index == 1 || client->index == 3 || client->index == 5) {
+        nbTransferOnCpu[0]--;
+    } else {
+        if (client->index == 2 || client->index == 4 || client->index == 6) {
+            nbTransferOnCpu[1]--;
+        } else {
+            nbTransferOnCpu[2]--;
+        }
+    }
+
+    // close f
+    if (client->f != NULL) fclose(client->f);
+
+    return result;
+}
+
 /*
 	TODO: support multi-line reply
 */
@@ -182,18 +339,6 @@ static int32_t write_reply(client_t *client, uint16_t code, char *msg) {
     free(msgbuf);
     msgbuf = NULL;
     return ret;
-}
-
-// this method is called on transfer success but also on transfer failure
-static int32_t endTransfer(client_t *client) {
-    int32_t result = 0;
-
-    // close file if needed
-    if (client->f != NULL) {
-        fclose(client->f);
-    }
-
-    return result;
 }
 
 
@@ -1009,6 +1154,9 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, msg);
     }
 
+    // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
+    setvbuf(client->f, client->transferBuffer, _IOFBF, TRANSFER_BUFFER_SIZE);
+
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
@@ -1018,12 +1166,9 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         client->restart_marker = 0;
         return write_reply(client, 550, strerror(lseek_error));
     }
-    // init bytes counter
-    client->bytesTransferred = 0;
 
-    int32_t result = prepare_data_connection(client, send_from_file, client, endTransfer);
+    int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
     if (result < 0) endTransfer(client);
-    nbFilesSent++;
 
     return result;
 }
@@ -1040,6 +1185,9 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     strcpy(client->fileName, fileName);
     strcpy(client->cwd, folder);
     if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+
+    // store the file path
+    sprintf(client->uploadFilePath, "%s%s", folder, fileName);
 
     char *folderName   = basename(folder);
     char *pos          = strrchr(folder, '/');
@@ -1062,12 +1210,11 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         return write_reply(client, 550, msg);
     }
 
-    // init bytes counter
-    client->bytesTransferred = 0;
+    // set the size to TRANSFER_BUFFER_SIZE - (2*DEFAULT_NET_BUFFER_SIZE) (chunk size used in recv_to__file)
+    setvbuf(client->f, client->transferBuffer, _IOFBF, TRANSFER_BUFFER_SIZE - (2 * DEFAULT_NET_BUFFER_SIZE));
 
-    int32_t result = prepare_data_connection(client, recv_to_file, client, endTransfer);
+    int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
     if (result < 0) endTransfer(client);
-    nbFilesReceived++;
     return result;
 }
 
@@ -1285,9 +1432,19 @@ void cleanup_ftp() {
 
         write_reply(clients[client_index], 421, "Service not available, closing control connection.");
 
+        if (!OSIsThreadTerminated(clients[client_index]->transferThread)) {
+            console_printf("C[%d] transfer of %s aborted !", clients[client_index]->index + 1, clients[client_index]->fileName);
 
+            OSCancelThread(clients[client_index]->transferThread);
+            OSTestThreadCancel();
+        }
 
         cleanup_client(clients[client_index]);
+
+        if (clients[client_index]->transferThread != NULL) free(clients[client_index]->transferThread);
+        if (clients[client_index]->transferBuffer != NULL) free(clients[client_index]->transferBuffer);
+
+        free(clients[client_index]);
     }
 }
 
@@ -1401,7 +1558,7 @@ static void process_data_events(client_t *client) {
     } else {
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
         // file transfer finished
-        if (client->f != NULL && result == 0 && client->bytesTransferred > 0) {
+        if (client->transferCallback == 0 && client->bytesTransferred > 0) {
 
             // compute transfer speed
             uint64_t duration = (OSGetTime() - (client->data_connection_timer - (OSTime) (FTP_SERVER_CONNECTION_TIMEOUT) *1000000000)) * 4000ULL / BUS_SPEED;
@@ -1413,7 +1570,11 @@ static void process_data_events(client_t *client) {
                 if (client->bytesTransferred >= 2 * DEFAULT_NET_BUFFER_SIZE) {
                     client->speed = (float) (client->bytesTransferred) / (float) (duration * 1000);
 
-                    console_printf("> C[%d] %s transferred at %.2f MB/s (%d bytes)", client->index + 1, client->fileName, client->speed, client->bytesTransferred);
+                    if (strlen(client->uploadFilePath) == 0) {
+                        console_printf("> C[%d] %s sent at %.2f MB/s (%d bytes)", client->index + 1, client->fileName, client->speed, client->bytesTransferred);
+                    } else {
+                        console_printf("> C[%d] %s received at %.2f MB/s (%d bytes)", client->index + 1, client->fileName, client->speed, client->bytesTransferred);
+                    }
                 }
             }
         }
@@ -1438,20 +1599,12 @@ static void process_data_events(client_t *client) {
         } else {
 
             char msg[FTPMAXPATHLEN + 80] = "";
-            if (client->f != NULL) {
-                if (client->speed != 0) {
+            if (client->transferCallback == 0) {
+                if (client->speed != 0)
                     sprintf(msg, "C[%d] %s transferred successfully %.0fKB/s", client->index + 1, client->fileName, client->speed * 1000);
-
-                    if (client->speed > maxTransferRate) maxTransferRate = client->speed;
-                    if (client->speed < minTransferRate) minTransferRate = client->speed;
-                    sumAvgSpeed += client->speed;
-
-                    // increment nbAvgFiles and take speed into account for mean calculation
-                    nbSpeedMeasures++;
-
-                } else {
+                else
                     sprintf(msg, "C[%d] %s transferred successfully", client->index + 1, client->fileName);
-                }
+                result = 0;
             } else
                 sprintf(msg, "C[%d] command executed successfully", client->index + 1);
 
@@ -1525,6 +1678,7 @@ bool process_ftp_events(int32_t server) {
     bool network_down = !process_accept_events(server);
     if (!network_down) {
         int client_index;
+        float totalSpeedMBs     = 0;
         uint8_t nbActiveClients = 0;
 
         // Treat all actives clients/connections
@@ -1533,6 +1687,8 @@ bool process_ftp_events(int32_t server) {
             if (clients[client_index]->socket != -1) {
                 nbActiveClients++;
                 if (clients[client_index]->data_callback) {
+                    // total is the sum of speed computed for each connection
+                    if (clients[client_index]->speed) totalSpeedMBs += clients[client_index]->speed;
 
                     process_data_events(clients[client_index]);
                 } else {
@@ -1541,23 +1697,35 @@ bool process_ftp_events(int32_t server) {
             }
         }
 
+        if (totalSpeedMBs > 0) {
+            // increment nbSpeedMeasures and take speed into account for mean calculation
+            nbSpeedMeasures++;
 
-        OSSleepTicks(OSMillisecondsToTicks(5));
+            // fix mutli rate errors
+            int nbt = (int) (totalSpeedMBs / maxSpeedPerTransfer);
+            if (nbt > 1) totalSpeedMBs = totalSpeedMBs / nbt;
 
+            if (totalSpeedMBs > maxTransferRate) maxTransferRate = totalSpeedMBs;
+            if (totalSpeedMBs < minTransferRate) minTransferRate = totalSpeedMBs;
+            sumAvgSpeed += totalSpeedMBs;
 
-        if (nbActiveClients <= 1) {
+        } else {
 
-            if (lastSumAvgSpeed != sumAvgSpeed) {
+            // no transfer is running
+            if (nbActiveClients == 1 && lastSumAvgSpeed != sumAvgSpeed) {
                 // last stats saved are outdated
                 displayTransferSpeedStats();
                 // save last stats
                 lastSumAvgSpeed = sumAvgSpeed;
             }
+        }
 
-            if (nbActiveClients == 0) {
+        if (nbActiveClients == 0) {
             // sleep 2 sec before listening again
-                OSSleepTicks(OSSecondsToTicks(2));
-            }
+            OSSleepTicks(OSSecondsToTicks(2));
+        } else {
+            // let the server breathe
+            OSSleepTicks(OSMillisecondsToTicks(125));
         }
     }
 

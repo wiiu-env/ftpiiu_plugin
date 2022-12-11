@@ -26,6 +26,7 @@ misrepresented as being the original software.
 #ifndef _FTP_H_
 #define _FTP_H_
 
+#include <coreinit/thread.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -53,6 +54,9 @@ misrepresented as being the original software.
 
 // default socket buffer size (max of value than can be set with setsockopt on SND/RCV buffers)
 #define DEFAULT_NET_BUFFER_SIZE       (128 * 1024)
+
+// stack size of each transfer thread
+#define FTP_TRANSFER_STACK_SIZE       0x2000
 
 #ifdef __cplusplus
 extern "C" {
@@ -83,10 +87,21 @@ struct client_struct {
     FILE *f;
     // name of the file to upload
     char fileName[FTPMAXPATHLEN];
+    // path to the file to upload
+    char uploadFilePath[FTPMAXPATHLEN];
+    // thread for transfering
+    OSThread *transferThread;
+    // preallocated transfer thread stack
+    uint8_t transferThreadStack[FTP_TRANSFER_STACK_SIZE];
+    // buffer for transferring files
+    char *transferBuffer;
     // for data transfer tracking
     int32_t bytesTransferred;
     // last speed computed in MB/s
     float speed;
+    // return code of send/recv functions
+    // when transferring = amount of data read/sent on each network operation
+    int32_t transferCallback;
 };
 
 typedef struct client_struct client_t;
