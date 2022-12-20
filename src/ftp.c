@@ -1154,9 +1154,6 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, msg);
     }
 
-    // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
-    setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
-
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
     if (client->restart_marker && lseek(fd, client->restart_marker, SEEK_SET) != client->restart_marker) {
@@ -1209,9 +1206,6 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
-
-    // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to__file)
-    setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
     if (result < 0) endTransfer(client);
