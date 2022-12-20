@@ -29,6 +29,7 @@
 #include "virtualpath.h"
 #include "main.h"
 #include "utils/logger.h"
+#include <fat.h>
 #include <malloc.h>
 #include <string.h>
 
@@ -204,7 +205,12 @@ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix
 }
 
 void MountVirtualDevices() {
+
+    if (fatMountSimple("sd", &Mocha_sdio_disc_interface)) {
+        VirtualMountDevice("sd:/");
+    }
     VirtualMountDevice("fs:/");
+
     if (gSystemFilesAllowed) {
         VirtualMountDevice("slccmpt01:/");
         VirtualMountDevice("storage_odd_tickets:/");

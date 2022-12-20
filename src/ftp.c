@@ -166,7 +166,7 @@ int32_t create_server(uint16_t port) {
         }
 
         // allocate the transfer buffer
-        clients[client_index]->transferBuffer = (char *) memalign(64, TRANSFER_BUFFER_SIZE);
+        clients[client_index]->transferBuffer = (char *) memalign(64, 2 * DEFAULT_NET_BUFFER_SIZE);
         if (!clients[client_index]->transferBuffer) {
             console_printf("ERROR when allocating transferThread [%d]", client_index);
             return -ENOMEM;
@@ -1155,7 +1155,7 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     }
 
     // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
-    setvbuf(client->f, client->transferBuffer, _IOFBF, TRANSFER_BUFFER_SIZE);
+    setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
@@ -1210,8 +1210,8 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         return write_reply(client, 550, msg);
     }
 
-    // set the size to TRANSFER_BUFFER_SIZE - (2*DEFAULT_NET_BUFFER_SIZE) (chunk size used in recv_to__file)
-    setvbuf(client->f, client->transferBuffer, _IOFBF, TRANSFER_BUFFER_SIZE - (2 * DEFAULT_NET_BUFFER_SIZE));
+    // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to__file)
+    setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
     if (result < 0) endTransfer(client);

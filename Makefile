@@ -31,7 +31,8 @@ INCLUDES	:=	src
 CFLAGS	:=	-Wall -O2 -ffunction-sections \
 			$(MACHDEP)
 
-CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__ 
+CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__ -D__wiiu__
+# -DDEBUG
 
 CXXFLAGS	:= $(CFLAGS) -std=gnu++20
 
@@ -48,7 +49,7 @@ CXXFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
 CFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
 endif
 
-LIBS	:= -lwups -lwut -lmocha
+LIBS	:= -lwups -lwut -lmocha -lfat
 
 #-------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level

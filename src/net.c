@@ -36,6 +36,7 @@ misrepresented as being the original software.
 // socket options
 #define SO_REUSESOCK   0x0200 // allow reuse of socket in TWAIT state
 #define SO_NOSLOWSTART 0x4000 // suppress slowstart
+#define TCP_CORK       0x0003 // TCP_CORK
 #include "net.h"
 
 
@@ -96,6 +97,9 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     // enable
     uint32_t enabled = 1;
 
+
+    // --- socket options ---
+
     // reuse addr and port
     setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
 
@@ -108,24 +112,21 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     // To raise the I/O buffers size : activate WinScale
     setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enabled, sizeof(enabled));
 
-    // Activate TCP SAck
-    setsockopt(sock, SOL_SOCKET, SO_TCPSACK, &enabled, sizeof(enabled));
-
-    // Activate TCP nodelay
-    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
-
-    // disable
-    uint32_t disabled = 0;
-
-    // Disable TCP keepalive
-    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &disabled, sizeof(disabled));
-
     // SO_LINGER options (with timeout 0).
     // connection will close immediately after closing your program; and next restart will be able to bind again
     struct linger lin;
     lin.l_onoff  = 0;
     lin.l_linger = 0;
     setsockopt(sock, SOL_SOCKET, SO_LINGER, (const char *) &lin, sizeof(int));
+
+
+    // --- TCP options ---
+
+    // Activate TCP nodelay
+    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
+
+    // TCP_Cork (no need to disable it when packet is not complete when combined with TCP_NODELAY)
+    setsockopt(sock, IPPROTO_TCP, TCP_CORK, &enabled, sizeof(enabled));
 
 
     // Set non blocking mode
@@ -303,8 +304,8 @@ int32_t send_from_file(int32_t s, client_t *client) {
     int sndBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
-    // (client->transferBuffer size = TRANSFER_BUFFER_SIZE)
-    int dlBufferSize = TRANSFER_BUFFER_SIZE;
+    // (client->transferBuffer size = 2*DEFAULT_NET_BUFFER_SIZE)
+    int dlBufferSize = DEFAULT_NET_BUFFER_SIZE;
 
     int32_t bytes_read = dlBufferSize;
     while (bytes_read) {
@@ -379,11 +380,11 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 
-    // (client->transferBuffer size = TRANSFER_BUFFER_SIZE)
+    // (client->transferBuffer size = 2*DEFAULT_NET_BUFFER_SIZE)
     // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
     // use the max size of the preallocated buffer minus the max overflow
     // Note that this size is also used to setvbuf in ftp.c
-    uint32_t chunckSize = TRANSFER_BUFFER_SIZE - 2 * rcvBuffSize;
+    uint32_t chunckSize = DEFAULT_NET_BUFFER_SIZE;
 
     int32_t bytes_read   = chunckSize;
     uint32_t retryNumber = 0;
