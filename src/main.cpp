@@ -4,6 +4,7 @@
 #include "virtualpath.h"
 #include <coreinit/cache.h>
 #include <cstring>
+#include <fat.h>
 #include <mocha/mocha.h>
 #include <nn/ac.h>
 #include <stdio.h>
@@ -123,6 +124,7 @@ void startServer() {
 
 void stopServer() {
     BackgroundThread::destroyInstance();
+    fatUnmount("sd");
     if (gMochaPathsWereMounted) {
         Mocha_UnmountFS("slccmpt01");
         Mocha_UnmountFS("storage_odd_tickets");

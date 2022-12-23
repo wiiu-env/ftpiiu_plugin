@@ -225,7 +225,6 @@ int launchTransfer(int argc UNUSED, const char **argv) {
 static int32_t transfer(int32_t data_socket UNUSED, client_t *client) {
 
     int32_t result = -EAGAIN;
-
     // on the very first call
     if (client->bytesTransferred == -1) {
 
@@ -319,6 +318,14 @@ static int32_t endTransfer(client_t *client) {
     if (client->f != NULL) fclose(client->f);
 
     return result;
+}
+
+// this method is called on transfer success but also on transfer failure
+static int32_t endTransferOnSd(client_t *client) {
+
+    // close f
+    if (client->f != NULL) fclose(client->f);
+    return 0;
 }
 
 /*
@@ -1153,6 +1160,12 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
+    bool transferOnSdcard = false;
+    if (strcmp(client->cwd, "/sd/") >= 0) transferOnSdcard = true;
+
+    if (!transferOnSdcard)
+        // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
+        setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
@@ -1164,8 +1177,15 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(lseek_error));
     }
 
-    int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
-    if (result < 0) endTransfer(client);
+    // hard limit transfers on SD card
+    int32_t result = 0;
+    if (transferOnSdcard) {
+        result = prepare_data_connection(client, send_from_file, client, endTransferOnSd);
+        if (result < 0) endTransferOnSd(client);
+    } else {
+        result = prepare_data_connection(client, transfer, client, endTransfer);
+        if (result < 0) endTransfer(client);
+    }
 
     return result;
 }
@@ -1207,8 +1227,23 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         return write_reply(client, 550, msg);
     }
 
-    int32_t result = prepare_data_connection(client, transfer, client, endTransfer);
-    if (result < 0) endTransfer(client);
+    bool transferOnSdcard = false;
+    if (strcmp(client->cwd, "/sd/") >= 0) transferOnSdcard = true;
+
+    if (!transferOnSdcard)
+        // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to__file)
+        setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
+
+    // hard limit transfers on SD card
+    int32_t result = 0;
+    if (transferOnSdcard) {
+        result = prepare_data_connection(client, recv_to_file, client, endTransferOnSd);
+        if (result < 0) endTransferOnSd(client);
+    } else {
+        result = prepare_data_connection(client, transfer, client, endTransfer);
+        if (result < 0) endTransfer(client);
+    }
+
     return result;
 }
 
