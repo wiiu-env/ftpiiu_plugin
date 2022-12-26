@@ -124,7 +124,7 @@ void startServer() {
 
 void stopServer() {
     BackgroundThread::destroyInstance();
-    fatUnmount("sd");
+    fatUnmount("fs/vol/external01");
     if (gMochaPathsWereMounted) {
         Mocha_UnmountFS("slccmpt01");
         Mocha_UnmountFS("storage_odd_tickets");

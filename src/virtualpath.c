@@ -206,11 +206,13 @@ void AddVirtualFSVOLPath(const char *name, const char *alias, const char *prefix
 
 void MountVirtualDevices() {
 
+    VirtualMountDevice("fs:/");
+
+    /*
     if (fatMountSimple("sd", &Mocha_sdio_disc_interface)) {
         VirtualMountDevice("sd:/");
     }
-
-    VirtualMountDevice("fs:/");
+*/
 
     if (gSystemFilesAllowed) {
         VirtualMountDevice("slccmpt01:/");
@@ -226,6 +228,8 @@ void MountVirtualDevices() {
     AddVirtualFSPath("vol", NULL, NULL);
     AddVirtualFSVOLPath("external01", NULL, NULL);
     AddVirtualFSVOLPath("content", NULL, NULL);
+
+    fatMountSimple("fs/vol/external01", &Mocha_sdio_disc_interface);
 }
 
 void UnmountVirtualPaths() {

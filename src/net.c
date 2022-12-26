@@ -37,6 +37,8 @@ misrepresented as being the original software.
 #define SO_REUSESOCK   0x0200 // allow reuse of socket in TWAIT state
 #define SO_NOSLOWSTART 0x4000 // suppress slowstart
 #define TCP_CORK       0x0003 // TCP_CORK
+#define SO_USELOOPBACK 0x0040
+
 #include "net.h"
 
 
@@ -127,7 +129,6 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 
     // TCP_Cork (no need to disable it when packet is not complete when combined with TCP_NODELAY)
     setsockopt(sock, IPPROTO_TCP, TCP_CORK, &enabled, sizeof(enabled));
-
 
     // Set non blocking mode
     set_blocking(sock, false);
@@ -305,7 +306,7 @@ int32_t send_from_file(int32_t s, client_t *client) {
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
     // (client->transferBuffer size = 2*DEFAULT_NET_BUFFER_SIZE)
-    int dlBufferSize = DEFAULT_NET_BUFFER_SIZE;
+    int dlBufferSize = sndBuffSize;
 
     int32_t bytes_read = dlBufferSize;
     while (bytes_read) {
@@ -379,6 +380,10 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     // MAX value = DEFAULT_NET_BUFFER_SIZE
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
+
+    // disable routing sockets
+    uint32_t disabled = 0;
+    setsockopt(s, SOL_SOCKET, SO_USELOOPBACK, &disabled, sizeof(disabled));
 
     // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
     // use the max size of the preallocated buffer minus the max overflow
