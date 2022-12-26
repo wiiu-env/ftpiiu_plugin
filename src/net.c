@@ -383,7 +383,7 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
     // use the max size of the preallocated buffer minus the max overflow
     // Note that this size is also used to setvbuf in ftp.c
-    uint32_t chunckSize = 11 * DEFAULT_NET_BUFFER_SIZE;
+    uint32_t chunckSize = DEFAULT_NET_BUFFER_SIZE;
 
     int32_t bytes_read   = chunckSize;
     uint32_t retryNumber = 0;
