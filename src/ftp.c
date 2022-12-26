@@ -1161,7 +1161,7 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, msg);
     }
     bool transferOnSdcard = false;
-    if (strcmp(client->cwd, "/sd/") >= 0) transferOnSdcard = true;
+    if (strcmp(client->cwd, "/sd/") >= 0 || strcmp(client->cwd, "/fs/vol/external01") >= 0) transferOnSdcard = true;
 
     if (!transferOnSdcard)
         // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
@@ -1228,7 +1228,7 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     }
 
     bool transferOnSdcard = false;
-    if (strcmp(client->cwd, "/sd/") >= 0) transferOnSdcard = true;
+    if (strcmp(client->cwd, "/sd/") >= 0 || strcmp(client->cwd, "/fs/vol/external01") >= 0) transferOnSdcard = true;
 
     if (!transferOnSdcard)
         // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to__file)

@@ -210,6 +210,8 @@ void MountVirtualDevices() {
         VirtualMountDevice("sd:/");
     }
 
+    VirtualMountDevice("fs:/");
+
     if (gSystemFilesAllowed) {
         VirtualMountDevice("slccmpt01:/");
         VirtualMountDevice("storage_odd_tickets:/");
@@ -221,6 +223,9 @@ void MountVirtualDevices() {
         VirtualMountDevice("storage_usb:/");
         VirtualMountDevice("usb:/");
     }
+    AddVirtualFSPath("vol", NULL, NULL);
+    AddVirtualFSVOLPath("external01", NULL, NULL);
+    AddVirtualFSVOLPath("content", NULL, NULL);
 }
 
 void UnmountVirtualPaths() {
