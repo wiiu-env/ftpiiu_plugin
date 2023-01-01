@@ -166,7 +166,7 @@ int32_t create_server(uint16_t port) {
         }
 
         // allocate the transfer buffer
-        clients[client_index]->transferBuffer = (char *) memalign(64, 4 * DEFAULT_NET_BUFFER_SIZE);
+        clients[client_index]->transferBuffer = (char *) memalign(64, DEFAULT_NET_BUFFER_SIZE);
         if (!clients[client_index]->transferBuffer) {
             console_printf("ERROR when allocating transferThread [%d]", client_index);
             return -ENOMEM;
@@ -1155,17 +1155,17 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     if (folder != NULL) free(folder);
 
     client->f = vrt_fopen(client->cwd, client->fileName, "rb");
-    if (!client->f) {
+    if (client->f == NULL) {
         char msg[FTPMAXPATHLEN + 40] = "";
         sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
         return write_reply(client, 550, msg);
     }
     bool transferOnSdcard = false;
-    if (strcmp(client->cwd, "/sd/") >= 0 || strcmp(client->cwd, "/fs/vol/external01") >= 0) transferOnSdcard = true;
+    if (strstr(client->cwd, "/fs/vol/external01") != NULL) transferOnSdcard = true;
 
     if (!transferOnSdcard)
-        // set the size to TRANSFER_BUFFER_SIZE (chunk size used in send_from_file)
-        setvbuf(client->f, client->transferBuffer, _IOFBF, 4 * DEFAULT_NET_BUFFER_SIZE);
+        // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in send_from_file)
+        setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
@@ -1220,7 +1220,7 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     if (folderName != NULL) free(folderName);
 
     client->f = vrt_fopen(client->cwd, client->fileName, mode);
-    if (!client->f) {
+    if (client->f == NULL) {
 
         char msg[FTPMAXPATHLEN + 40] = "";
         sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
@@ -1228,11 +1228,11 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     }
 
     bool transferOnSdcard = false;
-    if (strcmp(client->cwd, "/sd/") >= 0 || strcmp(client->cwd, "/fs/vol/external01") >= 0) transferOnSdcard = true;
+    if (strstr(client->cwd, "/fs/vol/external01") != NULL) transferOnSdcard = true;
 
     if (!transferOnSdcard)
-        // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to__file)
-        setvbuf(client->f, client->transferBuffer, _IOFBF, 3 * DEFAULT_NET_BUFFER_SIZE);
+        // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to_file)
+        setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
 
     // hard limit transfers on SD card
     int32_t result = 0;
@@ -1596,7 +1596,7 @@ static void process_data_events(client_t *client) {
                 // set a threshold on file size to consider file for average calculation
                 // take only files larger than the network buffer used
 
-                if (client->bytesTransferred >= 2 * DEFAULT_NET_BUFFER_SIZE) {
+                if (client->bytesTransferred >= DEFAULT_NET_BUFFER_SIZE) {
                     client->speed = (float) (client->bytesTransferred) / (float) (duration * 1000);
 
                     if (strlen(client->uploadFilePath) == 0) {

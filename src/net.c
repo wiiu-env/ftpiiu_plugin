@@ -31,13 +31,13 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#define MIN(x, y)      ((x) < (y) ? (x) : (y))
+#define MIN(x, y)        ((x) < (y) ? (x) : (y))
 
 // socket options
-#define SO_REUSESOCK   0x0200 // allow reuse of socket in TWAIT state
-#define SO_NOSLOWSTART 0x4000 // suppress slowstart
-#define TCP_CORK       0x0003 // TCP_CORK
-#define SO_USELOOPBACK 0x0040
+#define SO_REUSESOCK     0x0200 // allow reuse of socket in TWAIT state
+#define TCP_CORK         0x0003 // TCP_CORK
+#define TCP_DEFER_ACCEPT 0x0009 // Wake up listener only when data arrive
+#define TCP_QUICKACK     0x0012
 
 #include "net.h"
 
@@ -103,13 +103,7 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     // --- socket options ---
 
     // reuse addr and port
-    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enabled, sizeof(enabled));
-
-    // reuse sockets
     setsockopt(sock, SOL_SOCKET, SO_REUSESOCK, &enabled, sizeof(enabled));
-
-    // Disable slowstart
-    setsockopt(sock, SOL_SOCKET, SO_NOSLOWSTART, &enabled, sizeof(enabled));
 
     // To raise the I/O buffers size : activate WinScale
     setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enabled, sizeof(enabled));
@@ -129,6 +123,12 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
 
     // TCP_Cork (no need to disable it when packet is not complete when combined with TCP_NODELAY)
     setsockopt(sock, IPPROTO_TCP, TCP_CORK, &enabled, sizeof(enabled));
+
+    // TCP_DEFER_ACCEPT
+    setsockopt(sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, &enabled, sizeof(enabled));
+
+    // TCP_QUICKACK
+    setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &enabled, sizeof(enabled));
 
     // Set non blocking mode
     set_blocking(sock, false);
@@ -380,10 +380,6 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     // MAX value = DEFAULT_NET_BUFFER_SIZE
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
-
-    // disable routing sockets
-    uint32_t disabled = 0;
-    setsockopt(s, SOL_SOCKET, SO_USELOOPBACK, &disabled, sizeof(disabled));
 
     // network_readChunk can overflow but less than (rcvBuffSize*2) bytes
     // use the max size of the preallocated buffer minus the max overflow

@@ -33,6 +33,9 @@
 #include <malloc.h>
 #include <string.h>
 
+#define console_printf(FMT, ARGS...) DEBUG_FUNCTION_LINE_WRITE(FMT, ##ARGS);
+
+
 uint8_t MAX_VIRTUAL_PARTITIONS        = 0;
 VIRTUAL_PARTITION *VIRTUAL_PARTITIONS = NULL;
 
@@ -208,12 +211,6 @@ void MountVirtualDevices() {
 
     VirtualMountDevice("fs:/");
 
-    /*
-    if (fatMountSimple("sd", &Mocha_sdio_disc_interface)) {
-        VirtualMountDevice("sd:/");
-    }
-*/
-
     if (gSystemFilesAllowed) {
         VirtualMountDevice("slccmpt01:/");
         VirtualMountDevice("storage_odd_tickets:/");
@@ -229,7 +226,11 @@ void MountVirtualDevices() {
     AddVirtualFSVOLPath("external01", NULL, NULL);
     AddVirtualFSVOLPath("content", NULL, NULL);
 
-    fatMountSimple("fs/vol/external01", &Mocha_sdio_disc_interface);
+
+    if (!fatMountSimple("fs/vol/external01", &Mocha_sdio_disc_interface)) {
+        console_printf("FAILED to mount fs/vol/external01 with libFat!");
+    }
+
 }
 
 void UnmountVirtualPaths() {
