@@ -230,7 +230,6 @@ void MountVirtualDevices() {
     if (!fatMountSimple("fs/vol/external01", &Mocha_sdio_disc_interface)) {
         console_printf("FAILED to mount fs/vol/external01 with libFat!");
     }
-
 }
 
 void UnmountVirtualPaths() {
