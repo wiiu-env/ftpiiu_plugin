@@ -31,13 +31,33 @@ misrepresented as being the original software.
 #include <sys/fcntl.h>
 #include <unistd.h>
 
-#define MIN(x, y)        ((x) < (y) ? (x) : (y))
+#define MIN(x, y)    ((x) < (y) ? (x) : (y))
 
-// socket options
-#define SO_REUSESOCK     0x0200 // allow reuse of socket in TWAIT state
-#define TCP_CORK         0x0003 // TCP_CORK
-#define TCP_DEFER_ACCEPT 0x0009 // Wake up listener only when data arrive
-#define TCP_QUICKACK     0x0012
+// extra socket options
+#define SO_REUSESOCK 0x0200 // Allow reuse of socket in TWAIT state
+
+// NOTE : that i tried the following options on socket and TCP without any significant
+// improvements on speeds but with issues when transfering a large number of files
+//
+// TCP OPTIONS :
+//
+//#define TCP_CORK                     0x0003 // Never send partially complete segments
+// must be combined with TCP_NODELAY for recv()
+//#define TCP_DEFER_ACCEPT             0x0009 // Wake up listener only when data arrive
+//#define TCP_QUICKACK                 0x000c // Block/reenable quick acks
+//#define TCP_FASTOPEN                 0x0017 // Enable FastOpen on listeners
+//#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
+//#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
+//#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
+//TCP_NOACKDELAY
+
+// #define TCP_CONGESTION             0x000d // change the congestion control method
+// tried "tcp_highspeed" ("cubic" might be the default but i didn't check)
+
+// SOCKETS OPTIONS
+//
+//SO_TCPSACK
+//#define SO_NOSLOWSTART               0x4000 // suppress slowstart
 
 #include "net.h"
 
@@ -76,10 +96,10 @@ static bool retry(int32_t socketError) {
     // retry
     if (socketError == -EINPROGRESS ||
         socketError == -EALREADY ||
-        socketError == -ENOMEM ||
         socketError == -EBUSY ||
         socketError == -ETIME ||
         socketError == -ECONNREFUSED ||
+        socketError == -ECONNRESET ||
         socketError == -ETIMEDOUT ||
         socketError == -EMFILE ||
         socketError == -ENFILE ||
@@ -99,38 +119,14 @@ int32_t network_socket(int32_t domain, int32_t type, int32_t protocol) {
     // enable
     uint32_t enabled = 1;
 
-
     // --- socket options ---
 
-    // reuse addr and port
+    // reuse sockets
     setsockopt(sock, SOL_SOCKET, SO_REUSESOCK, &enabled, sizeof(enabled));
-
-    // To raise the I/O buffers size : activate WinScale
+    // activate WinScale
     setsockopt(sock, SOL_SOCKET, SO_WINSCALE, &enabled, sizeof(enabled));
 
-    // SO_LINGER options (with timeout 0).
-    // connection will close immediately after closing your program; and next restart will be able to bind again
-    struct linger lin;
-    lin.l_onoff  = 0;
-    lin.l_linger = 0;
-    setsockopt(sock, SOL_SOCKET, SO_LINGER, (const char *) &lin, sizeof(int));
-
-
-    // --- TCP options ---
-
-    // Activate TCP nodelay
-    setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &enabled, sizeof(enabled));
-
-    // TCP_Cork (no need to disable it when packet is not complete when combined with TCP_NODELAY)
-    setsockopt(sock, IPPROTO_TCP, TCP_CORK, &enabled, sizeof(enabled));
-
-    // TCP_DEFER_ACCEPT
-    setsockopt(sock, IPPROTO_TCP, TCP_DEFER_ACCEPT, &enabled, sizeof(enabled));
-
-    // TCP_QUICKACK
-    setsockopt(sock, IPPROTO_TCP, TCP_QUICKACK, &enabled, sizeof(enabled));
-
-    // Set non blocking mode
+    // set non blocking mode
     set_blocking(sock, false);
 
     return sock;
@@ -239,6 +235,7 @@ int32_t network_close(int32_t s) {
     if (s < 0) {
         return -1;
     }
+    shutdown(s, SHUT_RDWR);
     int res = close(s);
     if (res < 0) {
         int err = -errno;
@@ -301,7 +298,7 @@ int32_t send_from_file(int32_t s, client_t *client) {
     // return code
     int32_t result = 0;
 
-    // max value = DEFAULT_NET_BUFFER_SIZE
+    // set snd buffer size to its MAX value = DEFAULT_NET_BUFFER_SIZE
     int sndBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_SNDBUF, &sndBuffSize, sizeof(sndBuffSize));
 
@@ -377,7 +374,7 @@ int32_t recv_to_file(int32_t s, client_t *client) {
     // return code
     int32_t result = 0;
 
-    // MAX value = DEFAULT_NET_BUFFER_SIZE
+    // set recv buffer size to its MAX value = DEFAULT_NET_BUFFER_SIZE
     int rcvBuffSize = DEFAULT_NET_BUFFER_SIZE;
     setsockopt(s, SOL_SOCKET, SO_RCVBUF, &rcvBuffSize, sizeof(rcvBuffSize));
 

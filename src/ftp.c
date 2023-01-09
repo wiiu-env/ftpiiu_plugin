@@ -137,12 +137,12 @@ int32_t create_server(uint16_t port) {
     int32_t ret;
     if ((ret = network_bind(server, (struct sockaddr *) &bindAddress, sizeof(bindAddress))) < 0) {
         network_close_blocking(server);
-        //gxprintf("Error binding socket: [%i] %s\n", -ret, strerror(-ret));
+        //gxprintf("Error binding socket: %d(%s)\n", ret, strerror(abs(ret)));
         return ret;
     }
     if ((ret = network_listen(server, MAX_CLIENTS)) < 0) {
         network_close_blocking(server);
-        //gxprintf("Error listening on socket: [%i] %s\n", -ret, strerror(-ret));
+        //gxprintf("Error listening on socket: [%i] %s\n", ret, strerror(abs(ret)));
         return ret;
     }
 
@@ -697,7 +697,7 @@ static int32_t ftp_CWD(client_t *client, char *path) {
         } else {
 
             char msg[FTPMAXPATHLEN + 40] = "";
-            sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%s", client->index + 1, client->cwd, fileName, strerror(errno));
+            sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%d (%s)", client->index + 1, client->cwd, fileName, errno, strerror(errno));
 
             write_reply(client, 550, msg);
         }
@@ -770,7 +770,7 @@ static int32_t ftp_MKD(client_t *client, char *path) {
             sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, fileName, client->cwd);
 
         } else {
-            sprintf(msg, "C[%d] Error in MKD when cd to cwd=%s, path=%s : err = %s", client->index + 1, client->cwd, fileName, strerror(errno));
+            sprintf(msg, "C[%d] Error in MKD cwd=%s, path=%s : err = %d (%s)", client->index + 1, client->cwd, fileName, errno, strerror(errno));
         }
     }
 
@@ -843,7 +843,7 @@ static int32_t ftp_SIZE(client_t *client, char *path) {
         sprintf(msg, "%llu", st.st_size);
         msgCode = 213;
     } else {
-        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%s", client->index + 1, fileName, client->cwd, strerror(errno));
+        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%d (%s)", client->index + 1, fileName, client->cwd, errno, strerror(errno));
     }
     if (fileName != NULL) free(fileName);
     if (folder != NULL) free(folder);
@@ -958,6 +958,7 @@ static int32_t prepare_data_connection_active(client_t *client, data_connection_
             return write_reply(client, 520, msg);
         }
     }
+
     struct sockaddr_in bindAddress;
     memset(&bindAddress, 0, sizeof(bindAddress));
     bindAddress.sin_family      = AF_INET;
@@ -1096,8 +1097,8 @@ static int32_t ftp_NLST(client_t *client, char *path) {
 
     DIR_P *dir = vrt_opendir(client->cwd, path);
     if (dir == NULL) {
-        char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "Error when NLIST cwd=%s path=%s : err = %s", client->cwd, path, strerror(errno));
+        char msg[FTPMAXPATHLEN + 80] = "";
+        sprintf(msg, "Error when NLIST cwd=%s path=%s : err = %d (%s)", client->cwd, path, errno, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
@@ -1130,7 +1131,7 @@ static int32_t ftp_LIST(client_t *client, char *path) {
     DIR_P *dir = vrt_opendir(client->cwd, path);
     if (dir == NULL) {
         char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "Error when LIST cwd=%s path=%s : err = %s", client->cwd, path, strerror(errno));
+        sprintf(msg, "Error when LIST cwd=%s path=%s : err = %d (%s)", client->cwd, path, errno, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
@@ -1157,11 +1158,11 @@ static int32_t ftp_RETR(client_t *client, char *path) {
     client->f = vrt_fopen(client->cwd, client->fileName, "rb");
     if (client->f == NULL) {
         char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
+        sprintf(msg, "C[%d] Error sending cwd=%s path=%s : err=%d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
         return write_reply(client, 550, msg);
     }
     bool transferOnSdcard = false;
-    if (strstr(client->cwd, "/fs/vol/external01") != NULL) transferOnSdcard = true;
+    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) transferOnSdcard = true;
 
     if (!transferOnSdcard)
         // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in send_from_file)
@@ -1223,12 +1224,12 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     if (client->f == NULL) {
 
         char msg[FTPMAXPATHLEN + 40] = "";
-        sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%s", client->index + 1, client->cwd, path, strerror(errno));
+        sprintf(msg, "C[%d] Error storing cwd=%s path=%s : err=%d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
         return write_reply(client, 550, msg);
     }
 
     bool transferOnSdcard = false;
-    if (strstr(client->cwd, "/fs/vol/external01") != NULL) transferOnSdcard = true;
+    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) transferOnSdcard = true;
     if (!transferOnSdcard)
         // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to_file)
         setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
@@ -1477,6 +1478,7 @@ void cleanup_ftp() {
 }
 
 static bool process_accept_events(int32_t server) {
+
     int32_t peer;
     struct sockaddr_in client_address;
     socklen_t addrlen = sizeof(client_address);
@@ -1559,7 +1561,7 @@ static void process_data_events(client_t *client) {
                     return;
                 }
                 if ((result != -EAGAIN) && (result != -EISCONN)) {
-                    console_printf("! ERROR : C[%d] unable to connect to client: rc=%d, err=%s", client->index + 1, -result, strerror(-result));
+                    console_printf("! ERROR : C[%d] unable to connect to client: rc=%d, err=%s", client->index + 1, -result, strerror(abs(result)));
                 }
             }
             if (result >= 0 || result == -EISCONN) {
@@ -1620,7 +1622,7 @@ static void process_data_events(client_t *client) {
         if (result < 0) {
             if (result != -2) {
                 char msg[FTPMAXPATHLEN] = "";
-                sprintf(msg, "C[%d] to be closed : error = %d (%s)", client->index + 1, result, strerror(result));
+                sprintf(msg, "C[%d] to be closed : error = %d (%s)", client->index + 1, result, strerror(abs(result)));
                 write_reply(client, 520, msg);
             }
             cleanup_client(client);
