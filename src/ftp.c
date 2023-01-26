@@ -87,6 +87,7 @@ static void resetClient(client_t *client) {
     client->data_connection_callback_arg = NULL;
     client->data_connection_cleanup      = NULL;
     client->data_connection_timer        = 0;
+    client->data_connection_timeout      = FTP_SERVER_CONNECTION_TIMEOUT;
     client->f                            = NULL;
     strcpy(client->fileName, "");
     strcpy(client->uploadFilePath, "");
@@ -463,14 +464,15 @@ static int32_t ftp_OPTS(client_t *client, char *rest) {
         return write_reply(client, 502, "Command not implemented.");
     }
 }
-// The three methods bellow are created to expand the FTP client support
-// client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
-// those functions are used to provide a same result for all clients :
+
+// The methods bellow were created to expand the FTP connection support
+// connection->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
+// those functions are used to provide a same result for all connections :
 //
-// 		- client->cwd is the folder containing path and path is a file or folder name
+// 	 connection->cwd is the folder containing path and path is a file or folder name
 //
 
-// Remove eventually the last trailling slash of client->cwd
+// Remove eventually the last trailling slash of connection->cwd
 static void removeTrailingSlash(char **cwd) {
     if (strcmp(*cwd, ".") == 0) strcpy(*cwd, "/");
     else {
@@ -490,9 +492,56 @@ static void removeTrailingSlash(char **cwd) {
     }
 }
 
-// basename(cwd) : return last folder in path
+
+// You must free the result if result is non-NULL.
+static char *str_replace(char *orig, char *rep, char *with) {
+    char *result;  // the returned string
+    char *ins;     // the next insert point
+    char *tmp;     // varies
+    int len_rep;   // length of rep (the string to remove)
+    int len_with;  // length of with (the string to replace rep with)
+    int len_front; // distance between rep and end of last rep
+    int count;     // number of replacements
+
+    // sanity checks and initialization
+    if (!orig || !rep)
+        return NULL;
+    len_rep = strlen(rep);
+    if (len_rep == 0)
+        return NULL; // empty rep causes infinite loop during count
+    if (!with)
+        with = "";
+    len_with = strlen(with);
+
+    // count the number of replacements needed
+    ins = orig;
+    for (count = 0; (tmp = strstr(ins, rep)); ++count) {
+        ins = tmp + len_rep;
+    }
+
+    tmp = result = malloc(strlen(orig) + (len_with - len_rep) * count + 1);
+
+    if (!result)
+        return NULL;
+
+    // first time through the loop, all the variable are set correctly
+    // from here on,
+    //    tmp points to the end of the result string
+    //    ins points to the next occurrence of rep in orig
+    //    orig points to the remainder of orig after "end of rep"
+    while (count--) {
+        ins       = strstr(orig, rep);
+        len_front = ins - orig;
+        tmp       = strncpy(tmp, orig, len_front) + len_front;
+        tmp       = strcpy(tmp, with) + len_with;
+        orig += len_front + len_rep; // move to next "end of rep"
+    }
+    strcpy(tmp, orig);
+    return result;
+}
+
 // caller must free the returned string
-static char *basename(char *cwd) {
+static char *getBasename(char *cwd) {
     char *final = NULL;
     if ((strlen(cwd) > 0) && (strcmp(cwd, "/") != 0)) {
         char *path = (char *) malloc(strlen(cwd) + 1);
@@ -505,162 +554,181 @@ static char *basename(char *cwd) {
     return final;
 }
 
-// this method is used to format the path :
-//   - client->cwd is the folder containing path
-//   - path is a file or folder name
-//
-// (client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck)
-//
-// caller must free folder and fileName strings
-static void formatPath(char *cwd, char *path, char **folder, char **fileName) {
+// check if a path to a file or folder is valid
+static bool isAValidFullPath(char *fp, const bool exist) {
 
-    *fileName = NULL;
-    *folder   = NULL;
-    char *pos = NULL;
+    // initialize returned value
+    bool isValid = false;
 
-    if ((strcmp(cwd, "/") == 0) && (path && ((strcmp(path, ".") == 0) || (strcmp(path, "/") == 0)))) {
+    if (fp != NULL && strlen(fp) > 0 && fp[0] == '/') {
 
-        // allocate and copy folder with cwd
-        *folder = (char *) malloc(strlen(cwd) + 1);
-        strcpy(*folder, cwd);
+        // get itemName and itemPath from fp
+        // itemName is allocated by getBasename()
+        char *itemName = getBasename(fp);
+        if (itemName != NULL) {
 
-        // allocate and copy fileName with .
-        *fileName = (char *) malloc(strlen(path) + 1);
-        strcpy(*fileName, ".");
+            char *pos = strrchr(fp, '/');
+            // itemPath is allocated by strndup
+            char *itemPath = strndup(fp, strlen(fp) - strlen(pos));
+            if (itemPath != NULL) {
 
-    } else {
-
-        char *cwdNoSlash = NULL;
-        // allocate and copy fileName with path
-        cwdNoSlash = (char *) malloc(strlen(cwd) + 1);
-        strcpy(cwdNoSlash, cwd);
-
-        // remove any trailing slash when cwd != "/"
-        removeTrailingSlash(&cwdNoSlash);
-
-        // cyberduck support
-        if (path) {
-            // path is given
-
-            // if first char is a slash
-            if ((path[0] == '/') && (strlen(path) > 1)) {
-                // path gives the whole full path
-
-                // get the folder from path
-                *fileName = basename(path);
-                pos       = strrchr(path, '/');
-                // folder is allocated by strndup
-                *folder = strndup(path, strlen(path) - strlen(pos));
-
-            } else {
-
-                if (strlen(path) > 1) {
-
-                    // path gives file's name
-
-                    // check if cwd contains path (cyberduck)
-                    if (strstr(cwdNoSlash, path) != NULL) {
-                        // remove file's name from the path
-
-                        // get the fileName from cwd
-                        *fileName = basename(cwdNoSlash);
-                        pos       = strrchr(cwdNoSlash, '/');
-                        // folder is allocated by strndup
-                        *folder = strndup(cwdNoSlash, strlen(cwdNoSlash) - strlen(pos));
-
-                        // update cwd
-                        strcpy(cwd, *folder);
-                        strcat(cwd, "/");
-
+                // check if the path is valid on file system mounted by the FTP server
+                char *realPath = to_real_path(itemPath, itemName);
+                if (realPath != NULL) {
+                    // if the path not exists (upload)
+                    if (!exist) {
+                        isValid = true;
                     } else {
-
-                        if (strcmp(cwdNoSlash, "") != 0) {
-
-                            // allocate and copy fileName with path
-                            *fileName = (char *) malloc(strlen(path) + 1);
-                            strcpy(*fileName, path);
-                            // allocate and copy folder with cwd
-                            *folder = (char *) malloc(strlen(cwdNoSlash) + 1);
-                            strcpy(*folder, cwdNoSlash);
-
-                        } else {
-
-                            // get the folder from path
-                            *fileName = basename(path);
-                            pos       = strrchr(path, '/');
-                            // folder is allocated by strndup
-                            *folder = strndup(path, strlen(path) - strlen(pos));
-
-                            // update cwd
-                            strcpy(cwd, *folder);
-                            strcat(cwd, "/");
-                            // update path
-                            strcpy(path, *fileName);
-                        }
-                    }
-                } else {
-                    if (strlen(path) == 1) {
-                        if (strcmp(path, "/") == 0) {
-
-                            *folder = (char *) malloc(2);
-                            strcpy(*folder, "/");
-                            *fileName = (char *) malloc(2);
-                            strcpy(*fileName, ".");
-
-                        } else {
-                            if (strcmp(path, ".") != 0) {
-                                *folder = (char *) malloc(2);
-                                strcpy(*folder, cwd);
-                                *fileName = (char *) malloc(2);
-                                strcpy(*fileName, path);
+                        // check that the path exist on file system
+                        struct stat stats;
+                        if (stat(fp, &stats) == 0) {
+                            switch (stats.st_mode & S_IFMT) {
+                                case S_IFDIR:
+                                case S_IFLNK:
+                                case S_IFREG:
+                                    isValid = true;
+                                    break;
+                                default:
+                                    break;
                             }
                         }
-                        // else should be '.'
+                    }
+                    free(realPath);
+                }
+                free(itemPath);
+            }
+            free(itemName);
+        }
+    }
+
+    return isValid;
+}
+
+
+// Because clientCwd and clientPath are not filled the same way by all FTP clients
+//
+// This method is used to set :
+//
+//   - clientCwd as the folder containing path
+//   - and clientPath to a file or folder name
+//
+// (no matter what FTP client is used)
+//
+static void formatPath(char *clientCwd, char *clientPath, const bool exist) {
+
+    if (clientCwd && clientPath) {
+
+        // much simple to concatenate clientCwd and clientPath and replace in the result
+        // instead of consider all use cases for all FTP clients, to build the final path
+
+        // allocate fullPath = clientCwd/clientPath
+        char *fullPathBuilt = (char *) malloc(strlen(clientCwd) + strlen(clientPath) + 1 + 1);
+        strcpy(fullPathBuilt, clientCwd);
+        strcat(fullPathBuilt, "/");
+        strcat(fullPathBuilt, clientPath);
+
+        char *tmpPath1 = str_replace(fullPathBuilt, "///", "/");
+        if (tmpPath1 != NULL) {
+
+            char *tmpPath2 = str_replace(tmpPath1, "//", "/");
+            free(tmpPath1);
+            if (tmpPath2 != NULL) {
+
+                char *fullPath = str_replace(tmpPath2, "/./", "/");
+                free(tmpPath2);
+                if (fullPath != NULL) {
+
+                    // check if fullPath = root
+                    if (strlen(fullPath) == 1 || strcmp(fullPath, "/.") == 0 || strcmp(fullPath, "./") == 0) {
+                        strcpy(clientCwd, "/");
+                        strcpy(clientPath, ".");
                     } else {
 
-                        // path is not given, cwd gives the whole full path
-                        if (strcmp(cwd, "/") != 0) {
+                        // remove any trailing slash to fullPath
+                        // allocate and copy fullPath in fullPathWithNoTrailingSlash
+                        char *fullPathWithNoTrailingSlash = (char *) malloc(strlen(fullPath) + 1);
+                        strcpy(fullPathWithNoTrailingSlash, fullPath);
+                        removeTrailingSlash(&fullPathWithNoTrailingSlash);
 
-                            // get path from cwd
-                            path      = basename(cwdNoSlash);
-                            *fileName = (char *) malloc(strlen(path) + 1);
-                            strcpy(*fileName, path);
+                        // file or folder path
+                        char *fofPath = NULL;
 
-                            pos = strrchr(cwdNoSlash, '/');
-                            // folder is allocated by strndup
-                            *folder = strndup(cwdNoSlash, strlen(cwdNoSlash) - strlen(pos));
+                        // used to point substring in string (strrchr() return, don't free it)
+                        char *pos = NULL;
 
-                            // update cwd
-                            strcpy(cwd, *folder);
-                            strcat(cwd, "/");
+                        // if fullPathWithNoTrailingSlash ends with /..
+                        if (strstr(fullPathWithNoTrailingSlash, "/..") != NULL) {
+                            // cd ..
+                            pos = strrchr(fullPath, '/');
+                            // fofPath is allocated by strndup
+                            fofPath = strndup(fullPath, strlen(fullPath) - strlen(pos));
+                        } else {
+                            // allocate fofPath and copy fullPathWithNoTrailingSlash
+                            fofPath = (char *) malloc(strlen(fullPathWithNoTrailingSlash) + 1);
+                            strcpy(fofPath, fullPathWithNoTrailingSlash);
                         }
+
+                        // full path validity flag
+                        bool fofPathIsValid = false;
+
+                        // check if the full path to the file or folder is valid
+                        if (!isAValidFullPath(fofPath, exist)) {
+
+                            // if not, full path might be given by clientPath alone (like when ftp_CWD) or client not supported
+                            if (isAValidFullPath(clientPath, exist)) {
+
+                                // remove any trailing slash to clientPath
+                                // allocate and copy clientPath in clientPathWithNoTrailingSlash
+                                char *clientPathWithNoTrailingSlash = (char *) malloc(strlen(clientPath) + 1);
+                                strcpy(clientPathWithNoTrailingSlash, clientPath);
+                                removeTrailingSlash(&clientPathWithNoTrailingSlash);
+
+                                // update file or folder full path
+                                strcpy(fofPath, clientPathWithNoTrailingSlash);
+                                free(clientPathWithNoTrailingSlash);
+
+                                // set the validity flag
+                                fofPathIsValid = true;
+                            }
+                            // else : FTP client is not supported, leave as it is
+                            // (fofPathIsValid is initialized to false)
+                        } else {
+                            // the full path is valid
+                            fofPathIsValid = true;
+                        }
+
+                        if (fofPathIsValid) {
+
+                            // get itemName and itemPath from fofPath
+                            // itemName is allocated by getBasename()
+                            char *itemName = getBasename(fofPath);
+                            strcpy(clientPath, itemName);
+
+                            pos = strrchr(fofPath, '/');
+                            // itemPath is allocated by strndup
+                            char *itemPath = strndup(fofPath, strlen(fofPath) - strlen(pos));
+                            // update clientCwd and ClientPath accordingly
+                            if (strlen(itemPath) == 0) {
+                                strcpy(clientCwd, "/");
+                            } else {
+                                strcpy(clientCwd, itemPath);
+                                strcat(clientCwd, "/");
+                            }
+                            free(itemPath);
+                            free(itemName);
+                        }
+                        free(fofPath);
+                        free(fullPathWithNoTrailingSlash);
                     }
+                    free(fullPath);
                 }
-            }
-
-        } else {
-
-            // path is not given, cwd gives the whole full path
-            if (strcmp(cwd, "/") != 0) {
-
-
-                // path is not given, cwd gives the whole full path
-                // get path from cwd
-                path      = basename(cwdNoSlash);
-                *fileName = (char *) malloc(strlen(path) + 1);
-                strcpy(*fileName, path);
-
-                pos = strrchr(cwdNoSlash, '/');
-                // folder is allocated by strndup
-                *folder = strndup(cwdNoSlash, strlen(path) - strlen(pos));
-
-                // update cwd
-                strcpy(cwd, *folder);
-                strcat(cwd, "/");
             }
         }
     }
 }
+
+// ftp_methods --------------------------------------------------------------------
+
 static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
     char msg[FTPMAXPATHLEN + 24];
     // TODO: escape double-quotes
@@ -678,32 +746,21 @@ static int32_t ftp_PWD(client_t *client, char *rest UNUSED) {
 
 static int32_t ftp_CWD(client_t *client, char *path) {
     int32_t result = 0;
-    char *folder   = NULL;
-    char *fileName = NULL;
 
-    formatPath(client->cwd, path, &folder, &fileName);
+    formatPath(client->cwd, path, true);
 
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    if (!vrt_chdir(client->cwd, path)) {
 
+        char msg[FTPMAXPATHLEN + 60] = "";
+        sprintf(msg, "C[%d] CWD successful to %s", client->index + 1, client->cwd);
+        write_reply(client, 250, msg);
+    } else {
 
-    if (fileName != NULL) {
+        char msg[FTPMAXPATHLEN + 80] = "";
+        sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
 
-        if (!vrt_chdir(client->cwd, fileName)) {
-
-            char msg[FTPMAXPATHLEN + 60] = "";
-            sprintf(msg, "C[%d] CWD successful to %s", client->index + 1, client->cwd);
-            write_reply(client, 250, msg);
-        } else {
-
-            char msg[FTPMAXPATHLEN + 40] = "";
-            sprintf(msg, "C[%d] error when CWD to cwd=%s path=%s : err=%d (%s)", client->index + 1, client->cwd, fileName, errno, strerror(errno));
-
-            write_reply(client, 550, msg);
-        }
-        free(fileName);
+        write_reply(client, 550, msg);
     }
-    if (folder != NULL) free(folder);
 
     // always return 0 on server side
     // - when client needs to create a folder tree on server side, client try CWD until it do not fail before launching the MKD command)
@@ -726,22 +783,16 @@ static int32_t ftp_CDUP(client_t *client, char *rest UNUSED) {
 }
 
 static int32_t ftp_DELE(client_t *client, char *path) {
-    char *folder   = NULL;
-    char *fileName = NULL;
 
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    formatPath(client->cwd, path, true);
     char msg[FTPMAXPATHLEN + 40] = "";
     int msgCode                  = 550;
-    if (!vrt_unlink(client->cwd, fileName)) {
-        sprintf(msg, "C[%d] %s removed", client->index + 1, fileName);
+    if (!vrt_unlink(client->cwd, path)) {
+        sprintf(msg, "C[%d] %s removed", client->index + 1, path);
         msgCode = 250;
     } else {
-        sprintf(msg, "C[%d] Error when DELE %s/%s : err = %s", client->index + 1, client->cwd, fileName, strerror(errno));
+        sprintf(msg, "C[%d] Error when DELE %s/%s : err = %s", client->index + 1, client->cwd, path, strerror(errno));
     }
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
     return write_reply(client, msgCode, msg);
 }
 
@@ -749,51 +800,38 @@ static int32_t ftp_MKD(client_t *client, char *path) {
     if (!*path) {
         return write_reply(client, 501, "Syntax error in parameters.");
     }
-    char *folder   = NULL;
-    char *fileName = NULL;
-
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    formatPath(client->cwd, path, false);
 
     char msg[FTPMAXPATHLEN + 60] = "";
     int msgCode                  = 550;
 
-    if (vrt_checkdir(client->cwd, fileName) >= 0) {
+    if (vrt_checkdir(client->cwd, path) >= 0) {
         msgCode = 257;
         sprintf(msg, "C[%d] folder already exist", client->index + 1);
 
     } else {
 
-        if (!vrt_mkdir(client->cwd, fileName, 0775)) {
+        if (!vrt_mkdir(client->cwd, path, 0777)) {
             msgCode = 250;
-            sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, fileName, client->cwd);
+            sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, path, client->cwd);
 
         } else {
-            sprintf(msg, "C[%d] Error in MKD cwd=%s, path=%s : err = %d (%s)", client->index + 1, client->cwd, fileName, errno, strerror(errno));
+            sprintf(msg, "C[%d] Error in MKD cwd=%s, path=%s : err = %d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
         }
     }
 
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
     return write_reply(client, msgCode, msg);
 }
 
 static int32_t ftp_RNFR(client_t *client, char *path) {
-    char *folder   = NULL;
-    char *fileName = NULL;
 
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->fileName, fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    formatPath(client->cwd, path, false);
+    strcpy(client->fileName, path);
 
-    strcpy(client->pending_rename, fileName);
+    strcpy(client->pending_rename, path);
     char msg[FTPMAXPATHLEN + 24] = "";
-    sprintf(msg, "C[%d] Ready for RNTO for %s", client->index + 1, fileName);
+    sprintf(msg, "C[%d] Ready for RNTO for %s", client->index + 1, path);
 
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
 
     return write_reply(client, 350, msg);
 }
@@ -805,48 +843,34 @@ static int32_t ftp_RNTO(client_t *client, char *path) {
         return write_reply(client, 503, msg);
     }
     int32_t result = 0;
-    char *folder   = NULL;
-    char *fileName = NULL;
 
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
-    if (!vrt_rename(client->cwd, client->pending_rename, fileName)) {
+    formatPath(client->cwd, path, false);
+
+    if (!vrt_rename(client->cwd, client->pending_rename, path)) {
         sprintf(msg, "C[%d] Rename %s to %s successfully", client->index + 1, client->pending_rename, path);
         result = write_reply(client, 250, msg);
     } else {
-        sprintf(msg, "C[%d] failed to rename %s to %s : err = %s", client->index + 1, client->pending_rename, fileName, strerror(errno));
+        sprintf(msg, "C[%d] failed to rename %s to %s : err = %s", client->index + 1, client->pending_rename, path, strerror(errno));
 
         result = write_reply(client, 550, msg);
     }
     *client->pending_rename = '\0';
-
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
 
     return result;
 }
 
 static int32_t ftp_SIZE(client_t *client, char *path) {
     struct stat st;
-
-    char *folder   = NULL;
-    char *fileName = NULL;
-
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
+    formatPath(client->cwd, path, true);
 
     char msg[FTPMAXPATHLEN + 40] = "";
     int msgCode                  = 550;
-    if (!vrt_stat(client->cwd, fileName, &st)) {
+    if (!vrt_stat(client->cwd, path, &st)) {
         sprintf(msg, "%llu", st.st_size);
         msgCode = 213;
     } else {
-        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%d (%s)", client->index + 1, fileName, client->cwd, errno, strerror(errno));
+        sprintf(msg, "C[%d] Error SIZE on %s in %s : err=%d (%s)", client->index + 1, path, client->cwd, errno, strerror(errno));
     }
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
     return write_reply(client, msgCode, msg);
 }
 
@@ -1012,7 +1036,7 @@ static int32_t prepare_data_connection(client_t *client, void *callback, void *a
             client->data_connection_callback_arg = arg;
             client->data_connection_cleanup      = cleanup;
             // timestamp uint64 in nanoseconds
-            client->data_connection_timer = OSGetTime() + (OSTime) (FTP_SERVER_CONNECTION_TIMEOUT) *1000000000;
+            client->data_connection_timer = OSGetTime() + (OSTime) (client->data_connection_timeout) * 1000000000;
         }
     }
     return result;
@@ -1142,19 +1166,11 @@ static int32_t ftp_LIST(client_t *client, char *path) {
 }
 
 static int32_t ftp_RETR(client_t *client, char *path) {
-    char *folder   = NULL;
-    char *fileName = NULL;
 
 
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcat(folder, "/");
+    formatPath(client->cwd, path, true);
 
-    strcpy(client->fileName, fileName);
-    strcpy(client->cwd, folder);
-
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
-
+    strcpy(client->fileName, path);
     client->f = vrt_fopen(client->cwd, client->fileName, "rb");
     if (client->f == NULL) {
         char msg[FTPMAXPATHLEN + 40] = "";
@@ -1162,11 +1178,15 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, msg);
     }
     bool transferOnSdcard = false;
-    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) transferOnSdcard = true;
+    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) {
 
-    if (!transferOnSdcard)
+        transferOnSdcard = true;
+        // increase timeout for mono-transfer mode
+        client->data_connection_timeout = client->data_connection_timeout * MAX_CLIENTS;
+    } else {
         // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in send_from_file)
         setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
+    }
 
     int fd = fileno(client->f);
     // if client->restart_marker <> 0; check its value
@@ -1178,7 +1198,7 @@ static int32_t ftp_RETR(client_t *client, char *path) {
         return write_reply(client, 550, strerror(lseek_error));
     }
 
-    // hard limit transfers on SD card
+    // hard limit transfers on SD card (only one transfer)
     int32_t result = 0;
     if (transferOnSdcard) {
         result = prepare_data_connection(client, send_from_file, client, endTransferOnSd);
@@ -1196,30 +1216,40 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     // Fix  Feature Request: Recursively create directories #26
     // Handlers are launched asynchronously => ftp_STOR or ftp_APPE can be launched
     // before ftp_MKD on file's folder
-    char *folder   = NULL;
-    char *fileName = NULL;
+    // => create recursively the folders to access path
 
-    formatPath(client->cwd, path, &folder, &fileName);
-    strcpy(client->fileName, fileName);
-    strcpy(client->cwd, folder);
-    if (strcmp(client->cwd, "/") != 0) strcat(client->cwd, "/");
-
+    formatPath(client->cwd, path, false);
+    strcpy(client->fileName, path);
     // store the file path
-    sprintf(client->uploadFilePath, "%s%s", folder, fileName);
+    sprintf(client->uploadFilePath, "%s%s", client->cwd, path);
 
-    char *folderName   = basename(folder);
-    char *pos          = strrchr(folder, '/');
-    char *parentFolder = strndup(folder, strlen(folder) - strlen(pos) + 1);
+    // create folders level to access to path
 
-    if (vrt_checkdir(parentFolder, folderName)) {
-        vrt_mkdir(parentFolder, folderName, 0775);
+    // duplicate client->cwd
+    char fp[FTPMAXPATHLEN];
+    strcpy(fp, client->cwd);
+
+    char delim[]                    = "/";
+    char rebuiltPath[FTPMAXPATHLEN] = "/";
+
+    // rebuild client->cwd while creating folders
+    char *ptr = strtok(fp, delim);
+    while (ptr != NULL) {
+        char level[FTPMAXPATHLEN];
+        strcpy(level, ptr);
+        if (vrt_checkdir(rebuiltPath, level) < 0) {
+            vrt_mkdir(rebuiltPath, level, 0777);
+        }
+
+        // add level to the rebuilt path
+        strcat(rebuiltPath, level);
+        strcat(rebuiltPath, "/");
+
+        // read next token
+        ptr = strtok(NULL, delim);
     }
 
-    if (fileName != NULL) free(fileName);
-    if (folder != NULL) free(folder);
-    if (parentFolder != NULL) free(parentFolder);
-    if (folderName != NULL) free(folderName);
-
+    // now fopen should not fail (client->cwd exist)
     client->f = vrt_fopen(client->cwd, client->fileName, mode);
     if (client->f == NULL) {
 
@@ -1229,12 +1259,16 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
     }
 
     bool transferOnSdcard = false;
-    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) transferOnSdcard = true;
-    if (!transferOnSdcard)
+    if (strstr(client->cwd, "/fs/vol/external01/") != NULL || strstr(client->cwd, "/sd/") != NULL) {
+        transferOnSdcard = true;
+        // increase timeout for mono-transfer mode
+        client->data_connection_timeout = client->data_connection_timeout * MAX_CLIENTS;
+    } else {
         // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to_file)
         setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
+    }
 
-    // hard limit transfers on SD card
+    // hard limit transfers on SD card (only one transfer)
     int32_t result = 0;
     if (transferOnSdcard) {
         result = prepare_data_connection(client, recv_to_file, client, endTransferOnSd);
@@ -1591,7 +1625,7 @@ static void process_data_events(client_t *client) {
         if (client->transferCallback == 0 && client->bytesTransferred > 0) {
 
             // compute transfer speed
-            uint64_t duration = (OSGetTime() - (client->data_connection_timer - (OSTime) (FTP_SERVER_CONNECTION_TIMEOUT) *1000000000)) * 4000ULL / BUS_SPEED;
+            uint64_t duration = (OSGetTime() - (client->data_connection_timer - (OSTime) (client->data_connection_timeout) * 1000000000)) * 4000ULL / BUS_SPEED;
             if (duration != 0) {
 
                 // set a threshold on file size to consider file for average calculation

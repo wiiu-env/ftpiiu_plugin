@@ -81,6 +81,7 @@ struct client_struct {
     void *data_connection_callback_arg;
     void (*data_connection_cleanup)(void *arg);
     uint64_t data_connection_timer;
+    uint64_t data_connection_timeout;
     // index of the connection
     uint32_t index;
     // file to transfer

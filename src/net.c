@@ -35,25 +35,25 @@ misrepresented as being the original software.
 
 // extra socket options
 #define SO_REUSESOCK 0x0200 // Allow reuse of socket in TWAIT state
+#define TCP_CORK     0x0003 // Never send partially complete segments \
+                            // must be combined with TCP_NODELAY for recv()
 
 // NOTE : that i tried the following options on socket and TCP without any significant
 // improvements on speeds but with issues when transfering a large number of files
 //
 // TCP OPTIONS :
 //
-//#define TCP_CORK                     0x0003 // Never send partially complete segments
-// must be combined with TCP_NODELAY for recv()
-//#define TCP_DEFER_ACCEPT             0x0009 // Wake up listener only when data arrive
-//#define TCP_QUICKACK                 0x000c // Block/reenable quick acks
+//#define TCP_DEFER_ACCEPT 0x0009 // Wake up listener only when data arrive
+//#define TCP_QUICKACK     0x000c // Block/reenable quick acks
 //#define TCP_FASTOPEN                 0x0017 // Enable FastOpen on listeners
 //#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
 //#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
 //#define TCP_FASTOPEN_CONNECT         0x001e // Attempt FastOpen with connect
 //TCP_NOACKDELAY
-
+//
 // #define TCP_CONGESTION             0x000d // change the congestion control method
 // tried "tcp_highspeed" ("cubic" might be the default but i didn't check)
-
+//
 // SOCKETS OPTIONS
 //
 //SO_TCPSACK
