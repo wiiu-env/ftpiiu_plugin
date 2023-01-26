@@ -35,8 +35,7 @@ misrepresented as being the original software.
 
 // extra socket options
 #define SO_REUSESOCK 0x0200 // Allow reuse of socket in TWAIT state
-#define TCP_CORK     0x0003 // Never send partially complete segments \
-                            // must be combined with TCP_NODELAY for recv()
+#define TCP_CORK     0x0003 // Never send partially complete segments, must be combined with TCP_NODELAY for recv()
 
 // NOTE : that i tried the following options on socket and TCP without any significant
 // improvements on speeds but with issues when transfering a large number of files
