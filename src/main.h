@@ -10,7 +10,7 @@ extern "C" {
 #include "version.h"
 #include <stdint.h>
 
-#define VERSION      "v0.4b"
+#define VERSION      "v0.4bMultiThread"
 #define VERSION_FULL VERSION VERSION_EXTRA
 
 extern bool gSystemFilesAllowed;

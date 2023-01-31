@@ -39,8 +39,6 @@ misrepresented as being the original software.
 #include "virtualpath.h"
 #include "vrt.h"
 
-#define BUS_SPEED 248625000
-
 static const uint16_t SRC_PORT    = 20;
 static const int32_t EQUIT        = 696969;
 static const char *CRLF           = "\r\n";
@@ -167,7 +165,7 @@ int32_t create_server(uint16_t port) {
         }
 
         // allocate the transfer buffer
-        clients[client_index]->transferBuffer = (char *) memalign(64, DEFAULT_NET_BUFFER_SIZE);
+        clients[client_index]->transferBuffer = (char *) memalign(64, 12 * DEFAULT_NET_BUFFER_SIZE);
         if (!clients[client_index]->transferBuffer) {
             console_printf("ERROR when allocating transferThread [%d]", client_index);
             return -ENOMEM;
@@ -466,13 +464,13 @@ static int32_t ftp_OPTS(client_t *client, char *rest) {
 }
 
 // The methods bellow were created to expand the FTP connection support
-// connection->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
+// client->cwd and path are not filled in the same way for WinScp, FilleZilla and Cyberduck
 // those functions are used to provide a same result for all connections :
 //
-// 	 connection->cwd is the folder containing path and path is a file or folder name
+// 	 client->cwd is the folder containing path and path is a file or folder name
 //
 
-// Remove eventually the last trailling slash of connection->cwd
+// Remove eventually the last trailling slash of client->cwd
 static void removeTrailingSlash(char **cwd) {
     if (strcmp(*cwd, ".") == 0) strcpy(*cwd, "/");
     else {
@@ -802,7 +800,7 @@ static int32_t ftp_MKD(client_t *client, char *path) {
     }
     formatPath(client->cwd, path, false);
 
-    char msg[FTPMAXPATHLEN + 60] = "";
+    char msg[FTPMAXPATHLEN + 80] = "";
     int msgCode                  = 550;
 
     if (vrt_checkdir(client->cwd, path) >= 0) {
@@ -813,8 +811,13 @@ static int32_t ftp_MKD(client_t *client, char *path) {
 
         if (!vrt_mkdir(client->cwd, path, 0777)) {
             msgCode = 250;
-            sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, path, client->cwd);
-
+            char abspath[MAXPATHLEN];
+            strcpy(abspath, client->cwd);
+            if (!vrt_chdir(abspath, path)) {
+                sprintf(msg, "C[%d] directory %s created in %s", client->index + 1, path, client->cwd);
+            } else {
+                sprintf(msg, "C[%d] Error in MKD cannot cd to cwd=%s, path=%s : err = %d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
+            }
         } else {
             sprintf(msg, "C[%d] Error in MKD cwd=%s, path=%s : err = %d (%s)", client->index + 1, client->cwd, path, errno, strerror(errno));
         }
@@ -843,8 +846,6 @@ static int32_t ftp_RNTO(client_t *client, char *path) {
         return write_reply(client, 503, msg);
     }
     int32_t result = 0;
-
-    formatPath(client->cwd, path, false);
 
     if (!vrt_rename(client->cwd, client->pending_rename, path)) {
         sprintf(msg, "C[%d] Rename %s to %s successfully", client->index + 1, client->pending_rename, path);
@@ -1264,8 +1265,8 @@ static int32_t stor_or_append(client_t *client, char *path, char mode[3]) {
         // increase timeout for mono-transfer mode
         client->data_connection_timeout = client->data_connection_timeout * MAX_CLIENTS;
     } else {
-        // set the size to DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to_file)
-        setvbuf(client->f, client->transferBuffer, _IOFBF, DEFAULT_NET_BUFFER_SIZE);
+        // set the size to 10*DEFAULT_NET_BUFFER_SIZE (chunk size used in recv_to_file)
+        setvbuf(client->f, client->transferBuffer, _IOFBF, 10 * DEFAULT_NET_BUFFER_SIZE);
     }
 
     // hard limit transfers on SD card (only one transfer)
@@ -1452,7 +1453,6 @@ static int32_t process_command(client_t *client, char *cmd_line) {
 }
 
 static void cleanup_data_resources(client_t *client) {
-
     // close the data_socket
     if (client->data_socket >= 0 && client->data_socket != client->passive_socket) {
         network_close_blocking(client->data_socket);
@@ -1473,7 +1473,7 @@ static void displayTransferSpeedStats() {
         console_printf("============================================================");
         console_printf("  Speed (MB/s) [min = %.2f, mean = %.2f, max = %.2f]", minTransferRate, sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate);
         console_printf("  Files received : %d / sent : %d", nbFilesReceived, nbFilesSent);
-        console_printf("  Time ellapsed = %" PRIu64 " sec", (OSGetTime() - startTime) * 4000ULL / BUS_SPEED);
+        console_printf("  Time ellapsed = %" PRIu64 " sec", (OSGetTime() - startTime) * 4000ULL / OSGetSystemInfo()->busClockSpeed);
         console_printf("============================================================");
 
         OSSleepTicks(OSSecondsToTicks(2));
@@ -1490,6 +1490,7 @@ static void cleanup_client(client_t *client) {
 }
 
 void cleanup_ftp() {
+
     int client_index;
     for (client_index = 0; client_index < MAX_CLIENTS; client_index++) {
 
@@ -1535,14 +1536,14 @@ static bool process_accept_events(int32_t server) {
                 char msg[FTPMAXPATHLEN] = "";
                 if ((client_index == 0) && (nbFilesSent == 0) && (nbFilesReceived == 0)) {
                     // send recommendations to client
-                    sprintf(msg, "ftpiiu : %d connections max (%d simulatneous transfers), %d sec for timeout", MAX_CLIENTS, MAX_CLIENTS - 1, FTP_CLIENT_CONNECTION_TIMEOUT);
+                    sprintf(msg, "ftpiiu : %d connections max (%d transfers), %d sec for timeout", MAX_CLIENTS, MAX_CLIENTS - 1, FTP_CLIENT_CONNECTION_TIMEOUT);
                 } else {
                     // send recommendations send stats to client
 
                     // compute end time
-                    uint64_t duration = (OSGetTime() - startTime) * 4000ULL / BUS_SPEED;
+                    uint64_t duration = (OSGetTime() - startTime) * 4000ULL / OSGetSystemInfo()->busClockSpeed;
 
-                    sprintf(msg, "Transfers in MB/s: min=%.2f,  mean=%.2f,  max=%.2f | received:%d / sent:%d | time ellapsed %" PRIu64 "s", minTransferRate, nbSpeedMeasures == 0 ? 0.0 : sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration / 1000);
+                    sprintf(msg, "Speeds (MB/s): min=%.2f,  mean=%.2f,  max=%.2f | received:%d / sent:%d | time ellapsed %" PRIu64 "s", minTransferRate, nbSpeedMeasures == 0 ? 0.0 : sumAvgSpeed / (float) nbSpeedMeasures, maxTransferRate, nbFilesReceived, nbFilesSent, duration / 1000);
                 }
 
                 if (write_reply(clients[client_index], 220, msg) < 0) {
@@ -1563,6 +1564,7 @@ static bool process_accept_events(int32_t server) {
 }
 
 static void process_data_events(client_t *client) {
+
     int32_t result = 0;
     if (!client->data_connection_connected) {
         if (client->passive_socket >= 0) {
@@ -1572,6 +1574,7 @@ static void process_data_events(client_t *client) {
             if (result >= 0) {
                 client->data_socket               = result;
                 client->data_connection_connected = true;
+
                 // exit function
                 return;
             } else {
@@ -1585,6 +1588,7 @@ static void process_data_events(client_t *client) {
             // retry if can't connect before exiting
             int nbTries = 0;
         try_again:
+
             if ((result = network_connect(client->data_socket, (struct sockaddr *) &client->address, sizeof(client->address))) < 0) {
                 if (result == -EINPROGRESS || result == -EALREADY) {
                     nbTries++;
@@ -1620,12 +1624,13 @@ static void process_data_events(client_t *client) {
         }
 
     } else {
+
         result = client->data_callback(client->data_socket, client->data_connection_callback_arg);
         // file transfer finished
         if (client->transferCallback == 0 && client->bytesTransferred > 0) {
 
             // compute transfer speed
-            uint64_t duration = (OSGetTime() - (client->data_connection_timer - (OSTime) (client->data_connection_timeout) * 1000000000)) * 4000ULL / BUS_SPEED;
+            uint64_t duration = (OSGetTime() - (client->data_connection_timer - (OSTime) (client->data_connection_timeout) * 1000000000)) * 4000ULL / OSGetSystemInfo()->busClockSpeed;
             if (duration != 0) {
 
                 // set a threshold on file size to consider file for average calculation
@@ -1648,11 +1653,9 @@ static void process_data_events(client_t *client) {
         }
     }
 
-
     if (result == -EAGAIN) return;
 
     if (result <= 0) {
-
         if (result < 0) {
             if (result != -2) {
                 char msg[FTPMAXPATHLEN] = "";
