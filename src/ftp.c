@@ -279,10 +279,9 @@ static int32_t transfer(int32_t data_socket UNUSED, client_t *client) {
 
     } else {
         // join the thread here only in case of error or the transfer is finished
-        if (client->bytesTransferred <= 0) {
+        if (client->transferCallback <= 0) {
             OSJoinThread(client->transferThread, &result);
-        } else
-            result = client->transferCallback;
+        }
     }
 
     return result;
