@@ -12,7 +12,7 @@ jobs:
     - uses: actions/checkout@v2
     - name: clang-format
       run: |
-        docker run --rm -v ${PWD}:/src  wiiuenv/clang-format:13.0.0-2 -r ./src
+        docker run --rm -v ${PWD}:/src ghcr.io/wiiu-env/clang-format:13.0.0-2 -r ./src
   build-binary:
     runs-on: ubuntu-22.04
     needs: clang-format
