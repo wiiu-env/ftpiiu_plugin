@@ -46,6 +46,8 @@ FILE *vrt_fopen(char *cwd, char *path, char *mode);
 
 int vrt_stat(char *cwd, char *path, struct stat *st);
 
+int vrt_checkdir(char *cwd, char *path);
+
 int vrt_chdir(char *cwd, char *path);
 
 int vrt_unlink(char *cwd, char *path);

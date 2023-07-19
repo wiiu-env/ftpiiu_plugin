@@ -4,6 +4,7 @@
 #include "virtualpath.h"
 #include <coreinit/cache.h>
 #include <cstring>
+#include <fat.h>
 #include <mocha/mocha.h>
 #include <nn/ac.h>
 #include <stdio.h>
@@ -114,6 +115,11 @@ void startServer() {
             }
         }
 
+        Mocha_sdio_disc_interface.startup();
+        if (!fatMountSimple("sd", &Mocha_sdio_disc_interface)) {
+            DEBUG_FUNCTION_LINE_ERR("Failed to mount sdcard with libFat");
+        }
+
         MountVirtualDevices();
 
         thread = BackgroundThread::getInstance();
@@ -134,6 +140,9 @@ void stopServer() {
         Mocha_UnmountFS("storage_usb");
         gMochaPathsWereMounted = false;
     }
+
+    Mocha_sdio_disc_interface.shutdown();
+    fatUnmount("sd");
 
     DEBUG_FUNCTION_LINE("Unmount virtual paths");
     UnmountVirtualPaths();

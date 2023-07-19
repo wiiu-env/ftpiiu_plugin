@@ -10,12 +10,8 @@ extern "C" {
 #include "version.h"
 #include <stdint.h>
 
-#define MAXPATHLEN      256
-
-#define VERSION         "v0.3"
-#define VERSION_FULL    VERSION VERSION_EXTRA
-
-#define wiiu_geterrno() (errno)
+#define VERSION      "v0.4bMultiThread"
+#define VERSION_FULL VERSION VERSION_EXTRA
 
 extern bool gSystemFilesAllowed;
 

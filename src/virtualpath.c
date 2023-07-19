@@ -219,6 +219,8 @@ void MountVirtualDevices() {
     AddVirtualFSPath("vol", NULL, NULL);
     AddVirtualFSVOLPath("external01", NULL, NULL);
     AddVirtualFSVOLPath("content", NULL, NULL);
+
+    VirtualMountDevice("sd:/");
 }
 
 void UnmountVirtualPaths() {
