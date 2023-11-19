@@ -583,10 +583,20 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 					}
 					else if (i.revents & (POLLIN | POLLOUT))
 					{
-						for (unsigned i = 0; i < 10; ++i)
+						auto start_time = std::chrono::high_resolution_clock::now ();
+						while (true)
 						{
 							if (!((*session).*(session->m_transfer)) ())
+							{
 								break;
+							}
+
+							if (std::chrono::duration_cast<std::chrono::microseconds> (
+							        std::chrono::high_resolution_clock::now () - start_time) >
+							    5000ms)
+							{
+								break;
+							}
 						}
 					}
 					break;
@@ -1677,7 +1687,7 @@ bool FtpSession::listTransfer ()
 		{
 			// build the path
 			auto const fullPath = buildPath (m_lwd, dent->d_name);
-			struct stat st;
+			struct stat st      = {};
 
 #ifdef __3DS__
 			// the sdmc directory entry already has the type and size, so no need to do a slow stat
@@ -1997,7 +2007,7 @@ void FtpSession::DELE (char const *args_)
 	}
 
 	// unlink the path
-	if (::unlink (path.c_str ()) != 0)
+	if (IOAbstraction::unlink (path.c_str ()) != 0)
 	{
 		sendResponse ("550 %s\r\n", std::strerror (errno));
 		return;
@@ -2081,7 +2091,7 @@ void FtpSession::MKD (char const *args_)
 	}
 
 	// create the directory
-	if (::mkdir (path.c_str (), 0755) != 0)
+	if (IOAbstraction::mkdir (path.c_str (), 0755) != 0)
 	{
 		sendResponse ("550 %s\r\n", std::strerror (errno));
 		return;
@@ -2498,7 +2508,7 @@ void FtpSession::RMD (char const *args_)
 	}
 
 	// remove the directory
-	if (::rmdir (path.c_str ()) != 0)
+	if (IOAbstraction::rmdir (path.c_str ()) != 0)
 	{
 		sendResponse ("550 %d %s\r\n", __LINE__, std::strerror (errno));
 		return;
@@ -2566,7 +2576,7 @@ void FtpSession::RNTO (char const *args_)
 	}
 
 	// rename the file
-	if (::rename (m_rename.c_str (), path.c_str ()) != 0)
+	if (IOAbstraction::rename (m_rename.c_str (), path.c_str ()) != 0)
 	{
 		m_rename.clear ();
 		sendResponse ("550 %s\r\n", std::strerror (errno));

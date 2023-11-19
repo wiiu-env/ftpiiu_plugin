@@ -27,3 +27,4 @@ switch/romfs/shaders/*.dksh
 build/
 *.rpx
 *.wuhb
+*.wps

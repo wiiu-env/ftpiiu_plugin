@@ -20,7 +20,6 @@ public:
 
 	static int closedir (DIR *dirp);
 
-
 	static DIR *opendir (const char *dirname);
 
 	static struct dirent *readdir (DIR *dirp);
@@ -29,6 +28,16 @@ public:
 
 	static int lstat (const char *path, struct stat *buf);
 
+	static int mkdir (const char *path, mode_t mode);
+
+	static int rmdir (const char *path);
+
+	static int rename (const char *path, const char *path2);
+
+	static int unlink (const char *path);
+
 	static void addVirtualPath (const std::string &virtualPath,
 	    const std::vector<std::string> &subDirectories);
+
+	static void clear ();
 };

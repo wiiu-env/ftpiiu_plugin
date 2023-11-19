@@ -60,13 +60,7 @@ private:
 	/// \brief Command buffer size
 	constexpr static auto COMMAND_BUFFERSIZE = 4096;
 
-#ifdef __WIIU__
-	/// \brief Response buffer size
-	constexpr static auto RESPONSE_BUFFERSIZE = 128 * 1024;
-
-	/// \brief Transfer buffersize
-	constexpr static auto XFER_BUFFERSIZE = 128 * 1024;
-#elif defined(NDS)
+#ifdef NDS
 	/// \brief Response buffer size
 	constexpr static auto RESPONSE_BUFFERSIZE = 4096;
 
@@ -74,10 +68,10 @@ private:
 	constexpr static auto XFER_BUFFERSIZE = 8192;
 #else
 	/// \brief Response buffer size
-	constexpr static auto RESPONSE_BUFFERSIZE = 32768;
+	constexpr static auto RESPONSE_BUFFERSIZE = 16 * 1024;
 
 	/// \brief Transfer buffersize
-	constexpr static auto XFER_BUFFERSIZE = 65536;
+	constexpr static auto XFER_BUFFERSIZE = 32 * 1024;
 #endif
 
 	/// \brief File buffersize

@@ -3,6 +3,7 @@
 #include <map>
 #include <memory>
 #include <sys/dirent.h>
+#include <sys/unistd.h>
 #include <vector>
 
 class VirtualDirectory
@@ -17,9 +18,9 @@ public:
 		mCurIterator = mDirectories.begin ();
 	}
 
-	[[nodiscard]] DIR *getAsDir () const
+	[[nodiscard]] const DIR *getAsDir () const
 	{
-		return (DIR *)this;
+		return &mDirPtr;
 	}
 
 	struct dirent *readdir ()
@@ -31,10 +32,12 @@ public:
 		mDir = {};
 		snprintf (mDir.d_name, sizeof (mDir.d_name), "%s", mCurIterator->c_str ());
 		mCurIterator++;
+		mDirPtr.position++;
 		return &mDir;
 	}
 
 private:
+	DIR mDirPtr = {};
 	std::vector<std::string> mDirectories;
 	struct dirent mDir = {};
 	std::vector<std::string>::iterator mCurIterator{};
@@ -70,7 +73,7 @@ bool remove_locked_first_if (std::mutex &mutex, Container &container, Predicate 
 	return remove_first_if (container, pred);
 }
 
-static DIR *getVirtualDir (const std::vector<std::string> &subDirectories)
+static const DIR *getVirtualDir (const std::vector<std::string> &subDirectories)
 {
 	auto virtDir = std::make_unique<VirtualDirectory> (subDirectories);
 	auto *result = virtDir->getAsDir ();
@@ -124,12 +127,16 @@ int IOAbstraction::closedir (DIR *dirp)
 DIR *IOAbstraction::opendir (const char *dirname)
 {
 	auto convertedPath = convertPath (dirname);
-	if (sVirtualDirs.count (convertedPath) > 0)
+	auto * res =  ::opendir (convertedPath.c_str ());
+	if(res == nullptr)
 	{
-		return getVirtualDir (sVirtualDirs[convertedPath]);
-	}
+		if (sVirtualDirs.count (convertedPath) > 0)
+		{
+			return (DIR*) getVirtualDir (sVirtualDirs[convertedPath]);
+		}
 
-	return ::opendir (convertedPath.c_str ());
+	}
+	return res;
 }
 
 FILE *IOAbstraction::fopen (const char *_name, const char *_type)
@@ -194,4 +201,31 @@ void IOAbstraction::addVirtualPath (const std::string &virtualPath,
     const std::vector<std::string> &subDirectories)
 {
 	sVirtualDirs.insert (std::make_pair (virtualPath, subDirectories));
+}
+
+void IOAbstraction::clear ()
+{
+	std::lock_guard lock (sOpenVirtualDirectoriesMutex);
+	sOpenVirtualDirectories.clear ();
+	sVirtualDirs.clear ();
+}
+
+int IOAbstraction::mkdir (const char *path, mode_t mode)
+{
+	return ::mkdir (convertPath (path).c_str (), mode);
+}
+
+int IOAbstraction::rmdir (const char *path)
+{
+	return ::rmdir (convertPath (path).c_str ());
+}
+
+int IOAbstraction::unlink (const char *path)
+{
+	return ::unlink (convertPath (path).c_str ());
+}
+
+int IOAbstraction::rename (const char *path, const char *path2)
+{
+	return ::rename (convertPath (path).c_str (), convertPath (path2).c_str ());
 }
