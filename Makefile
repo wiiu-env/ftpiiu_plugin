@@ -12,9 +12,9 @@ export VERSION_MICRO := 0
 export VERSION := $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO)
 
 ###########################################################################
-all: nds 3dsx nro linux
+all: wiiu nds 3dsx nro linux
 
-all-classic: nds 3dsx-classic nro-classic linux
+all-classic: wiiu nds 3dsx-classic nro-classic linux
 
 format:
 	@clang-format -style=file -i $(filter-out \
@@ -36,6 +36,7 @@ format:
 		, $(shell find source include -type f -name \*.c -o -name \*.cpp -o -name \*.h))
 
 clean:
+	@$(MAKE) -f Makefile.wiiu clean
 	@$(MAKE) -f Makefile.nds clean
 	@$(MAKE) -f Makefile.3ds clean
 	@$(MAKE) -f Makefile.3ds clean CLASSIC="-DCLASSIC"
@@ -61,6 +62,9 @@ nxlink-classic:
 	@$(MAKE) -f Makefile.switch nxlink CLASSIC="-DCLASSIC"
 
 ###########################################################################
+wiiu:
+	@$(MAKE) -f Makefile.wiiu CLASSIC="-DCLASSIC"
+
 nds:
 	@$(MAKE) -f Makefile.nds CLASSIC="-DCLASSIC"
 

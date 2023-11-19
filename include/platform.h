@@ -28,6 +28,9 @@
 #include <3ds.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
+#elif defined(__WIIU__)
+#include <wut.h>
+#include <coreinit/debug.h>
 #endif
 
 #include <chrono>
@@ -35,7 +38,7 @@
 #include <functional>
 #include <memory>
 
-#ifdef CLASSIC
+#if defined(CLASSIC) &&  !defined(__WIIU__)
 extern PrintConsole g_statusConsole;
 extern PrintConsole g_logConsole;
 extern PrintConsole g_sessionConsole;

@@ -21,6 +21,7 @@
 #include "platform.h"
 
 #include "ftpServer.h"
+#include "log.h"
 
 #include "imgui.h"
 
@@ -58,9 +59,12 @@ int main (int argc_, char *argv_[])
 
 	while (platform::loop ())
 	{
+#ifndef NO_CONSOLE
 		server->draw ();
-
 		platform::render ();
+#else
+		drawLog();
+#endif
 	}
 
 	// clean up resources before exiting switch/3ds services
