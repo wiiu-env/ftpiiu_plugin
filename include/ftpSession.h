@@ -60,7 +60,13 @@ private:
 	/// \brief Command buffer size
 	constexpr static auto COMMAND_BUFFERSIZE = 4096;
 
-#ifdef NDS
+#ifdef __WIIU__
+	/// \brief Response buffer size
+	constexpr static auto RESPONSE_BUFFERSIZE = 128 * 1024;
+
+	/// \brief Transfer buffersize
+	constexpr static auto XFER_BUFFERSIZE = 128 * 1024;
+#elif defined(NDS)
 	/// \brief Response buffer size
 	constexpr static auto RESPONSE_BUFFERSIZE = 4096;
 
@@ -238,7 +244,7 @@ private:
 	SockAddr m_portAddr;
 
 	/// \brief Current working directory
-	std::string m_cwd = "/";
+	std::string m_cwd = "/fs/vol/external01/";
 
 	/// \brief List working directory
 	std::string m_lwd;

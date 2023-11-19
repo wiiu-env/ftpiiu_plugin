@@ -23,3 +23,7 @@ switch/build
 switch-classic/build
 switch/romfs/*.zst
 switch/romfs/shaders/*.dksh
+.idea/
+build/
+*.rpx
+*.wuhb

@@ -28,6 +28,10 @@
 #include <ranges>
 #include <vector>
 
+#ifdef __WIIU__
+#include <coreinit/debug.h>
+#endif
+
 namespace
 {
 #ifdef __3DS__
@@ -91,7 +95,9 @@ void drawLog ()
 #endif
 
 	auto const maxLogs =
-#ifdef CLASSIC
+#ifdef __WIIU__
+	    1000;
+#elif defined(CLASSIC)
 	    g_logConsole.windowHeight;
 #else
 	    MAX_LOGS;
@@ -113,6 +119,12 @@ void drawLog ()
 	    [RESPONSE] = "\x1b[36;1m", // cyan
 	};
 
+#ifdef __WIIU__
+	for (auto &cur : s_messages)
+	{
+		OSReport ("%s %s\x1b[0m", s_colors[cur.level], cur.message.c_str ());
+	}
+#else
 	auto it = std::begin (s_messages);
 	if (s_messages.size () > static_cast<unsigned> (g_logConsole.windowHeight))
 		it = std::next (it, s_messages.size () - g_logConsole.windowHeight);
@@ -125,6 +137,7 @@ void drawLog ()
 		++it;
 	}
 	std::fflush (stdout);
+#endif
 	s_messages.clear ();
 #else
 	ImVec4 const s_colors[] = {
@@ -236,17 +249,20 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 	if (level_ == DEBUG)
 		return;
 #endif
-
-#ifndef NDS
-	thread_local
-#endif
-	    static char buffer[1024];
-
-	std::vsnprintf (buffer, sizeof (buffer), fmt_, ap_);
-
 #ifndef NDS
 	auto const lock = std::scoped_lock (s_lock);
 #endif
+
+#if !defined(NDS) && !defined(__WIIU__)
+	thread_local
+#endif
+#if !defined(__WIIU__)
+	static
+#endif
+	char buffer[1024];
+
+	std::vsnprintf (buffer, sizeof (buffer), fmt_, ap_);
+
 #ifndef NDEBUG
 	// std::fprintf (stderr, "%s", s_prefix[level_]);
 	// std::fputs (buffer, stderr);

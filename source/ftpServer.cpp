@@ -202,11 +202,13 @@ void FtpServer::draw ()
 		if (m_socket)
 			std::sprintf (port, ":%u", m_socket->sockName ().port ());
 
+#ifndef NO_CONSOLE
 		consoleSelect (&g_statusConsole);
 		std::printf ("\x1b[0;0H\x1b[32;1m%s \x1b[36;1m%s%s",
 		    STATUS_STRING,
 		    m_socket ? m_socket->sockName ().name () : "Waiting on WiFi",
 		    m_socket ? port : "");
+#endif
 
 #ifndef NDS
 		char timeBuffer[16];
@@ -226,11 +228,14 @@ void FtpServer::draw ()
 #endif
 		if (!s_freeSpace.empty ())
 		{
+#ifndef NO_CONSOLE
 			consoleSelect (&g_statusConsole);
 			std::printf ("\x1b[0;%uH\x1b[32;1m%s",
 			    static_cast<unsigned> (g_statusConsole.windowWidth - s_freeSpace.size () + 1),
 			    s_freeSpace.c_str ());
 			std::fflush (stdout);
+
+#endif
 		}
 	}
 
@@ -238,6 +243,7 @@ void FtpServer::draw ()
 #ifndef NDS
 		auto const lock = std::scoped_lock (m_lock);
 #endif
+#ifndef NO_CONSOLE
 		consoleSelect (&g_sessionConsole);
 		std::fputs ("\x1b[2J", stdout);
 		for (auto &session : m_sessions)
@@ -247,6 +253,7 @@ void FtpServer::draw ()
 				std::fputc ('\n', stdout);
 		}
 		std::fflush (stdout);
+#endif
 	}
 
 	drawLog ();

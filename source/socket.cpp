@@ -236,6 +236,19 @@ bool Socket::setNonBlocking (bool const nonBlocking_)
 	return true;
 }
 
+bool Socket::setWinScale (const int val)
+{
+	int const o = val;
+
+	if (::setsockopt (m_fd, SOL_SOCKET, SO_WINSCALE, &o, sizeof (o)) < 0)
+	{
+		error ("setsockopt(SO_WINSCALE, %d): %s\n", val, std::strerror (errno));
+		return false;
+	}
+
+	return true;
+}
+
 bool Socket::setReuseAddress (bool const reuse_)
 {
 	int const reuse = reuse_;
