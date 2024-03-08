@@ -25,7 +25,9 @@
 #include "log.h"
 #include "platform.h"
 
+#ifndef __WIIU__
 #include "imgui.h"
+#endif
 
 #include <arpa/inet.h>
 #include <sys/stat.h>
@@ -1737,13 +1739,13 @@ bool FtpSession::listTransfer ()
 			}
 			else
 #endif
-			    // lstat the entry
+				// lstat the entry
 				if (IOAbstraction::lstat (fullPath.c_str (), &st) != 0)
-			{
+				{
 #ifndef __SWITCH__
-				sendResponse ("550 %s\r\n", std::strerror (errno));
-				setState (State::COMMAND, true, true);
-				return false;
+					sendResponse ("550 %s\r\n", std::strerror (errno));
+					setState (State::COMMAND, true, true);
+					return false;
 #else
 				// probably archive bit set; list name with dummy stats
 				std::memset (&st, 0, sizeof (st));
@@ -1780,7 +1782,7 @@ bool FtpSession::listTransfer ()
 					break;
 				}
 #endif
-			}
+				}
 
 			auto const path = encodePath (dent->d_name);
 			auto const rc   = fillDirent (st, path);

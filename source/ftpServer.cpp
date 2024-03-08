@@ -21,12 +21,16 @@
 #include "ftpServer.h"
 
 #include "fs.h"
+#ifndef __WIIU__
 #include "licenses.h"
+#endif
 #include "log.h"
 #include "platform.h"
 #include "socket.h"
 
+#ifndef __WIIU__
 #include "imgui.h"
+#endif
 
 #ifdef NDS
 #include <dswifi9.h>

@@ -127,14 +127,13 @@ int IOAbstraction::closedir (DIR *dirp)
 DIR *IOAbstraction::opendir (const char *dirname)
 {
 	auto convertedPath = convertPath (dirname);
-	auto * res =  ::opendir (convertedPath.c_str ());
-	if(res == nullptr)
+	auto *res          = ::opendir (convertedPath.c_str ());
+	if (res == nullptr)
 	{
 		if (sVirtualDirs.count (convertedPath) > 0)
 		{
-			return (DIR*) getVirtualDir (sVirtualDirs[convertedPath]);
+			return (DIR *)getVirtualDir (sVirtualDirs[convertedPath]);
 		}
-
 	}
 	return res;
 }

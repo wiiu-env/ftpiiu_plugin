@@ -22,8 +22,9 @@
 
 #include "ftpServer.h"
 #include "log.h"
-
+#ifndef __WIIU__
 #include "imgui.h"
+#endif
 
 #ifndef CLASSIC
 #include <curl/curl.h>
@@ -63,7 +64,7 @@ int main (int argc_, char *argv_[])
 		server->draw ();
 		platform::render ();
 #else
-		drawLog();
+		drawLog ();
 #endif
 	}
 
