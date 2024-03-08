@@ -22,7 +22,9 @@
 
 #include "platform.h"
 
+#ifndef __WIIU__
 #include "imgui.h"
+#endif
 
 #include <mutex>
 #include <ranges>
@@ -257,9 +259,9 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 	thread_local
 #endif
 #if !defined(__WIIU__)
-	static
+	    static
 #endif
-	char buffer[1024];
+	    char buffer[1024];
 
 	std::vsnprintf (buffer, sizeof (buffer), fmt_, ap_);
 

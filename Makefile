@@ -1,133 +1,148 @@
-.PHONY: all all-classic format clean
-.PHONY: dslink 3dslink 3dslink-classic nxlink-classic
-.PHONY: nds 3dsx cia nro linux
-.PHONY: 3dsx-classic cia-classic nro-classic
-.PHONY: release release-nds release-3dsx release-cia release-nro
-.PHONY: release-3dsx-classic release-cia-classic release-nro-classic
+#-------------------------------------------------------------------------------
+.SUFFIXES:
+#-------------------------------------------------------------------------------
 
-export GITREV  := $(shell git rev-parse HEAD 2>/dev/null | cut -c1-6)
-export VERSION_MAJOR := 3
-export VERSION_MINOR := 1
-export VERSION_MICRO := 0
-export VERSION := $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_MICRO)
+ifeq ($(strip $(DEVKITPRO)),)
+$(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
+endif
 
-###########################################################################
-all: wiiu nds 3dsx nro linux
+TOPDIR ?= $(CURDIR)
 
-all-classic: wiiu nds 3dsx-classic nro-classic linux
+include $(DEVKITPRO)/wups/share/wups_rules
 
-format:
-	@clang-format -style=file -i $(filter-out \
-		include/imconfig.h \
-		include/imgui.h \
-		source/imgui/imgui.cpp \
-		source/imgui/imgui_draw.cpp \
-		source/imgui/imgui_internal.h \
-		source/imgui/imgui_tables.cpp \
-		source/imgui/imgui_widgets.cpp \
-		source/imgui/imstb_rectpack.h \
-		source/imgui/imstb_textedit.h \
-		source/imgui/imstb_truetype.h \
-		source/linux/imgui_impl_glfw.cpp \
-		source/linux/imgui_impl_glfw.h \
-		source/linux/imgui_impl_opengl3.cpp \
-		source/linux/imgui_impl_opengl3.h \
-		source/linux/imgui_impl_opengl3_loader.h \
-		, $(shell find source include -type f -name \*.c -o -name \*.cpp -o -name \*.h))
+WUT_ROOT := $(DEVKITPRO)/wut
+WUPS_ROOT := $(DEVKITPRO)/wups
 
+#-------------------------------------------------------------------------------
+# TARGET is the name of the output
+# BUILD is the directory where object files & intermediate files will be placed
+# SOURCES is a list of directories containing source code
+# DATA is a list of directories containing data files
+# INCLUDES is a list of directories containing header files
+#-------------------------------------------------------------------------------
+TARGET		:=	ftpd
+BUILD		:=	build
+SOURCES		:=	source source/wiiu
+DATA		:=	data
+INCLUDES	:=	source include
+
+#-------------------------------------------------------------------------------
+# options for code generation
+#-------------------------------------------------------------------------------
+CFLAGS	:=	-Wall -O2 -ffunction-sections \
+			$(MACHDEP)
+            
+CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -D__WUPS__ -DSTATUS_STRING="\"ftpd v$(VERSION)\"" \
+            -DNO_IPV6 -DCLASSIC -DNO_CONSOLE -DFTPDCONFIG="\"/config/ftpd/ftpd.cfg\""
+
+CXXFLAGS	:= $(CFLAGS) -std=gnu++20
+
+ASFLAGS	:=	-g $(ARCH)
+LDFLAGS	=	-g $(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map) $(WUPSSPECS)
+
+ifeq ($(DEBUG),1)
+CXXFLAGS += -DDEBUG -g
+CFLAGS += -DDEBUG -g
+endif
+
+ifeq ($(DEBUG),VERBOSE)
+CXXFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
+CFLAGS += -DDEBUG -DVERBOSE_DEBUG -g
+endif
+
+LIBS	:= -lwups -lwut -lmocha
+
+#-------------------------------------------------------------------------------
+# list of directories containing libraries, this must be the top level
+# containing include and lib
+#-------------------------------------------------------------------------------
+LIBDIRS	:= $(PORTLIBS) $(WUPS_ROOT) $(WUT_ROOT) $(WUT_ROOT)/usr
+
+#-------------------------------------------------------------------------------
+# no real need to edit anything past this point unless you need to add additional
+# rules for different file extensions
+#-------------------------------------------------------------------------------
+ifneq ($(BUILD),$(notdir $(CURDIR)))
+#-------------------------------------------------------------------------------
+
+export OUTPUT	:=	$(CURDIR)/$(TARGET)
+export TOPDIR	:=	$(CURDIR)
+
+export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
+			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
+
+export DEPSDIR	:=	$(CURDIR)/$(BUILD)
+
+CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
+SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
+
+#-------------------------------------------------------------------------------
+# use CXX for linking C++ projects, CC for standard C
+#-------------------------------------------------------------------------------
+ifeq ($(strip $(CPPFILES)),)
+#-------------------------------------------------------------------------------
+	export LD	:=	$(CC)
+#-------------------------------------------------------------------------------
+else
+#-------------------------------------------------------------------------------
+	export LD	:=	$(CXX)
+#-------------------------------------------------------------------------------
+endif
+#-------------------------------------------------------------------------------
+
+export OFILES_BIN	:=	$(addsuffix .o,$(BINFILES))
+export OFILES_SRC	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
+export OFILES 	:=	$(OFILES_BIN) $(OFILES_SRC)
+export HFILES_BIN	:=	$(addsuffix .h,$(subst .,_,$(BINFILES)))
+
+export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
+			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
+			-I$(CURDIR)/$(BUILD)
+
+export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+
+.PHONY: $(BUILD) clean all
+
+#-------------------------------------------------------------------------------
+all: $(BUILD)
+
+$(BUILD):
+	@$(shell [ ! -d $(BUILD) ] && mkdir -p $(BUILD))
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+
+#-------------------------------------------------------------------------------
 clean:
-	@$(MAKE) -f Makefile.wiiu clean
-	@$(MAKE) -f Makefile.nds clean
-	@$(MAKE) -f Makefile.3ds clean
-	@$(MAKE) -f Makefile.3ds clean CLASSIC="-DCLASSIC"
-	@$(MAKE) -f Makefile.switch clean
-	@$(MAKE) -f Makefile.switch clean CLASSIC="-DCLASSIC"
-	@$(MAKE) -f Makefile.linux clean
-	@$(RM) ftpd.nds.xz ftpd*.3dsx.xz ftpd*.cia.xz ftpd*.nro.xz
+	@echo clean ...
+	@rm -fr $(BUILD) $(TARGET).wps $(TARGET).elf
 
-###########################################################################
-dslink:
-	@$(MAKE) -f Makefile.nds dslink
+#-------------------------------------------------------------------------------
+else
+.PHONY:	all
 
-3dslink:
-	@$(MAKE) -f Makefile.3ds 3dslink
+DEPENDS	:=	$(OFILES:.o=.d)
 
-3dslink-classic:
-	@$(MAKE) -f Makefile.3ds 3dslink CLASSIC="-DCLASSIC"
+#-------------------------------------------------------------------------------
+# main targets
+#-------------------------------------------------------------------------------
+all	:	$(OUTPUT).wps
 
-nxlink:
-	@$(MAKE) -f Makefile.switch nxlink
+$(OUTPUT).wps	:	$(OUTPUT).elf
+$(OUTPUT).elf	:	$(OFILES)
 
-nxlink-classic:
-	@$(MAKE) -f Makefile.switch nxlink CLASSIC="-DCLASSIC"
+$(OFILES_SRC)	: $(HFILES_BIN)
 
-###########################################################################
-wiiu:
-	@$(MAKE) -f Makefile.wiiu CLASSIC="-DCLASSIC"
+#-------------------------------------------------------------------------------
+# you need a rule like this for each extension you use as binary data
+#-------------------------------------------------------------------------------
+%.bin.o	%_bin.h :	%.bin
+#-------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	@$(bin2o)
 
-nds:
-	@$(MAKE) -f Makefile.nds CLASSIC="-DCLASSIC"
+-include $(DEPENDS)
 
-3dsx:
-	@$(MAKE) -f Makefile.3ds 3dsx
-
-3dsx-classic:
-	@$(MAKE) -f Makefile.3ds 3dsx CLASSIC="-DCLASSIC"
-
-cia: 3dsx
-	@$(MAKE) -f Makefile.3ds cia
-
-cia-classic: 3dsx-classic
-	@$(MAKE) -f Makefile.3ds cia CLASSIC="-DCLASSIC"
-
-nro:
-	@$(MAKE) -f Makefile.switch all
-
-nro-classic:
-	@$(MAKE) -f Makefile.switch all CLASSIC="-DCLASSIC"
-
-linux:
-	@$(MAKE) -f Makefile.linux
-
-###########################################################################
-release: release-nds \
-		release-3dsx release-3dsx-classic \
-		release-cia release-cia-classic \
-		release-nro release-nro-classic
-	@$(RM) -r release
-	@mkdir release
-	@xz -c <nds/ftpd.nds >release/ftpd.nds.xz
-	@ln -s ../nds/ftpd.nds release/ftpd.nds
-	@xz -c <3ds/ftpd.3dsx >release/ftpd.3dsx.xz
-	@ln -s ../3ds/ftpd.3dsx release/ftpd.3dsx
-	@xz -c <3ds-classic/ftpd-classic.3dsx >release/ftpd-classic.3dsx.xz
-	@ln -s ../3ds-classic/ftpd-classic.3dsx release/ftpd-classic.3dsx
-	@xz -c <3ds/ftpd.cia >release/ftpd.cia.xz
-	@ln -s ../3ds/ftpd.cia release/ftpd.cia
-	@xz -c <3ds-classic/ftpd-classic.cia >release/ftpd-classic.cia.xz
-	@ln -s ../3ds-classic/ftpd-classic.cia release/ftpd-classic.cia
-	@xz -c <switch/ftpd.nro >release/ftpd.nro.xz
-	@ln -s ../switch/ftpd.nro release/ftpd.nro
-	@xz -c <switch-classic/ftpd-classic.nro >release/ftpd-classic.nro.xz
-	@ln -s ../switch-classic/ftpd-classic.nro release/ftpd-classic.nro
-
-release-nds:
-	@$(MAKE) -f Makefile.nds DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto"
-
-release-3dsx:
-	@$(MAKE) -f Makefile.3ds 3dsx DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto"
-
-release-3dsx-classic:
-	@$(MAKE) -f Makefile.3ds 3dsx DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto" CLASSIC="-DCLASSIC"
-
-release-cia: release-3dsx
-	@$(MAKE) -f Makefile.3ds cia DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto"
-
-release-cia-classic: release-3dsx-classic
-	@$(MAKE) -f Makefile.3ds cia DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto" CLASSIC="-DCLASSIC"
-
-release-nro:
-	@$(MAKE) -f Makefile.switch all DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto"
-
-release-nro-classic:
-	@$(MAKE) -f Makefile.switch all DEFINES=-DNDEBUG OPTIMIZE="-O3 -flto" CLASSIC="-DCLASSIC"
+#-------------------------------------------------------------------------------
+endif
+#-------------------------------------------------------------------------------
