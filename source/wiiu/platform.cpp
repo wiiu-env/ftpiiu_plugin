@@ -19,6 +19,7 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "platform.h"
+#include "version.h"
 
 #include "IOAbstraction.h"
 #include "ftpServer.h"
@@ -39,16 +40,20 @@
 #ifndef CLASSIC
 #error "Wii U must be built in classic mode"
 #endif
-#define VERSION_FULL "0.1"
+#define VERSION "v0.4.1"
+#define VERSION_FULL VERSION VERSION_EXTRA
 
-WUPS_PLUGIN_NAME ("ftpd");
-WUPS_PLUGIN_DESCRIPTION ("FTP Server");
+WUPS_PLUGIN_NAME ("ftpiiu");
+WUPS_PLUGIN_DESCRIPTION ("FTP Server based on ftpd");
 WUPS_PLUGIN_VERSION (VERSION_FULL);
 WUPS_PLUGIN_AUTHOR ("mtheall, Maschell");
-WUPS_PLUGIN_LICENSE ("GPL");
+WUPS_PLUGIN_LICENSE ("GPL3");
 
 WUPS_USE_WUT_DEVOPTAB ();
-WUPS_USE_STORAGE ("ftpd"); // Unqiue id for the storage api
+WUPS_USE_STORAGE ("ftpiiu"); // Unique id for the storage api
+
+#define DEFAULT_FTPIIU_ENABLED_VALUE true
+#define DEFAULT_SYSTEM_FILES_ALLOWED_VALUE false
 
 #define FTPIIU_ENABLED_STRING "enabled"
 #define SYSTEM_FILES_ALLOWED_STRING "systemFilesAllowed"
@@ -60,8 +65,8 @@ bool platform::networkVisible ()
 
 bool platform::networkAddress (SockAddr &addr_)
 {
-	struct sockaddr_in addr;
-	addr.sin_family = AF_INET;
+	struct sockaddr_in addr = {};
+	addr.sin_family         = AF_INET;
 	nn::ac::GetAssignedAddress (&addr.sin_addr.s_addr);
 	addr_ = addr;
 	return true;
@@ -86,10 +91,10 @@ MochaUtilsStatus MountWrapper (const char *mount, const char *dev, const char *m
 	return res;
 }
 
-UniqueFtpServer server      = nullptr;
-bool sSystemFilesAllowed    = false;
-bool sMochaPathsWereMounted = false;
-bool sFTPServerEnabled      = true;
+UniqueFtpServer server             = nullptr;
+static bool sSystemFilesAllowed    = DEFAULT_SYSTEM_FILES_ALLOWED_VALUE;
+static bool sMochaPathsWereMounted = false;
+static bool sFTPServerEnabled      = DEFAULT_FTPIIU_ENABLED_VALUE;
 
 void start_server ()
 {
@@ -189,7 +194,7 @@ void stop_server ()
 	IOAbstraction::clear ();
 }
 
-void gFTPServerRunningChanged (ConfigItemBoolean *item, bool newValue)
+static void gFTPServerRunningChanged (ConfigItemBoolean *item, bool newValue)
 {
 	sFTPServerEnabled = newValue;
 	if (!sFTPServerEnabled)
@@ -210,7 +215,7 @@ void gFTPServerRunningChanged (ConfigItemBoolean *item, bool newValue)
 	}
 }
 
-void gSystemFilesAllowedChanged (ConfigItemBoolean *item, bool newValue)
+static void gSystemFilesAllowedChanged (ConfigItemBoolean *item, bool newValue)
 {
 	// DEBUG_FUNCTION_LINE("New value in gFTPServerEnabled: %d", newValue);
 	if (server != nullptr)
@@ -264,7 +269,7 @@ WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback (WUPSConfigCategoryHandle r
 			    (hostIpAddress >> 16) & 0xFF,
 			    (hostIpAddress >> 8) & 0xFF,
 			    (hostIpAddress >> 0) & 0xFF,
-			    5000);
+			    21);
 		}
 		else
 		{
@@ -277,7 +282,7 @@ WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback (WUPSConfigCategoryHandle r
 	}
 	catch (std::exception &e)
 	{
-		OSReport ("Exception T_T : %s\n", e.what ());
+		OSReport ("fptiiu plugin: Exception: %s\n", e.what ());
 		return WUPSCONFIG_API_CALLBACK_RESULT_ERROR;
 	}
 
@@ -286,32 +291,43 @@ WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback (WUPSConfigCategoryHandle r
 
 void ConfigMenuClosedCallback ()
 {
-	OSReport ("ConfigMenuClosedCallback\n");
 	WUPSStorageAPI::SaveStorage ();
 }
 
 INITIALIZE_PLUGIN ()
 {
-	WUPSConfigAPIOptionsV1 configOptions = {.name = "ftpd"};
+	WUPSConfigAPIOptionsV1 configOptions = {.name = "ftpiiu"};
 	if (WUPSConfigAPI_Init (configOptions, ConfigMenuOpenedCallback, ConfigMenuClosedCallback) !=
 	    WUPSCONFIG_API_RESULT_SUCCESS)
 	{
-		OSFatal ("Failed to init config api");
+		OSFatal ("ftpiiu plugin: Failed to init config api");
 	}
 
-	if (WUPSStorageAPI::GetOrStoreDefault (FTPIIU_ENABLED_STRING, sFTPServerEnabled, true) !=
+	WUPSStorageError err;
+	if ((err = WUPSStorageAPI::GetOrStoreDefault (
+	         FTPIIU_ENABLED_STRING, sFTPServerEnabled, DEFAULT_FTPIIU_ENABLED_VALUE)) !=
 	    WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("Failed\n");
+		OSReport ("ftpiiu plugin: Failed to get or create item \"%s\": %s (%d)\n",
+		    FTPIIU_ENABLED_STRING,
+		    WUPSStorageAPI_GetStatusStr (err),
+		    err);
 	}
-	if (WUPSStorageAPI::GetOrStoreDefault (
-	        SYSTEM_FILES_ALLOWED_STRING, sSystemFilesAllowed, false) != WUPS_STORAGE_ERROR_SUCCESS)
+	if ((err = WUPSStorageAPI::GetOrStoreDefault (SYSTEM_FILES_ALLOWED_STRING,
+	         sSystemFilesAllowed,
+	         DEFAULT_SYSTEM_FILES_ALLOWED_VALUE)) != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("Failed\n");
+		OSReport ("ftpiiu plugin: Failed to get or create item \"%s\": %s (%d)\n",
+		    SYSTEM_FILES_ALLOWED_STRING,
+		    WUPSStorageAPI_GetStatusStr (err),
+		    err);
 	}
-	if (WUPSStorageAPI::SaveStorage () != WUPS_STORAGE_ERROR_SUCCESS)
+
+	if ((err = WUPSStorageAPI::SaveStorage ()) != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("Failed\n");
+		OSReport ("ftpiiu plugin: Failed to save storage: %s (%d)\n",
+		    WUPSStorageAPI_GetStatusStr (err),
+		    err);
 	}
 }
 
@@ -372,7 +388,7 @@ public:
 	explicit privateData_t (std::function<void ()> &&func_) : thread (std::move (func_))
 	{
 		auto nativeHandle = (OSThread *)thread.native_handle ();
-		OSSetThreadName (nativeHandle, "ftpd");
+		OSSetThreadName (nativeHandle, "ftpiiu");
 		while (!OSSetThreadAffinity (nativeHandle, OS_THREAD_ATTRIB_AFFINITY_CPU2))
 		{
 			OSSleepTicks (OSMillisecondsToTicks (16));

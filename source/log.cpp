@@ -124,7 +124,7 @@ void drawLog ()
 #ifdef __WIIU__
 	for (auto &cur : s_messages)
 	{
-		OSReport ("%s %s\x1b[0m", s_colors[cur.level], cur.message.c_str ());
+		OSReport ("ftpiiu plugin: %s %s\x1b[0m", s_colors[cur.level], cur.message.c_str ());
 	}
 #else
 	auto it = std::begin (s_messages);
