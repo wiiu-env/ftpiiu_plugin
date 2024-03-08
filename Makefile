@@ -20,7 +20,7 @@ WUPS_ROOT := $(DEVKITPRO)/wups
 # DATA is a list of directories containing data files
 # INCLUDES is a list of directories containing header files
 #-------------------------------------------------------------------------------
-TARGET		:=	ftpd
+TARGET		:=	ftpiiu
 BUILD		:=	build
 SOURCES		:=	source source/wiiu
 DATA		:=	data
