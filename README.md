@@ -1,173 +1,60 @@
-# ftpd
+[![CI-Release](https://github.com/wiiu-env/ftpiiu_plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/wiiu-env/ftpiiu_plugin/actions/workflows/ci.yml)
 
-FTP Server for 3DS/Switch/Linux.
+# ftpiiu - A ftp server plugin for the Wii U based on ftpd
 
-## Features
+## Installation
+(`[ENVIRONMENT]` is a placeholder for the actual environment name.)
 
-- Appears to work well with a variety of clients.
-- Supports multiple simultaneous clients. The 3DS itself only appears to support enough sockets to perform 4-5 simultaneous data transfers, so it will help if you limit your FTP client to this many parallel requests.
-- Cutting-edge [graphics](#dear-imgui).
+1. Copy the file `ftpiiu.wps` into `sd:/wiiu/environments/[ENVIRONMENT]/plugins`.
+2. Requires the [WiiUPluginLoaderBackend](https://github.com/wiiu-env/WiiUPluginLoaderBackend) in `sd:/wiiu/environments/[ENVIRONMENT]/modules`.
 
-- Exit on NDS/3DS with START button
-- Exit on Switch with PLUS button
+## Usage information and settings
 
-- Toggle backlight on NDS/3DS with SELECT button
-- Toggle backlight on Switch with MINUS button
+- By default, the FTPiiU server is running as long the plugin loaded (file is in the plugin directory of your environment).
+- Access to the system files is **disabled by default**, you can enable it in the config menu.
+- To connect to the server you can use empty credentials
+- The SD card can be accessed via `/fs/vol/external01/`
 
-- Emulation of a /dev/zero (/devZero) device for network performance testing
-  - Example retrieve `curl ftp://192.168.1.115:5000/devZero -o /dev/zero`
-  - Example send `curl -T /dev/zero ftp://192.168.1.115:5000/devZero`
+Via the plugin config menu (press L, DPAD Down and Minus on the gamepad) you can configure the plugin. The available options are the following:
+- **Settings**:
+  - Enable FTPiiU:
+    - Starts/Stops the ftp server which is running in the background. Changes take effect when so close the config menu. (Default is true).
+  - Allow access to system files:
+    - Allows you to access all system files. If this option is disabled, you can only access `/fs/vol/content`, `/fs/vol/save` and `/fs/vol/external01` (SD card). Changes take effect when so close the config menu, but the server may restart. (Default is false).
+- Additionally, the config menu will display the IP of your console and the port the server is running at.
 
-## Dear ImGui
+See the [ftpd repository](https://github.com/mtheall/ftpd?tab=readme-ov-file#supported-commands) for a list of all supported commands.
 
-ftpd uses [Dear ImGui](https://github.com/ocornut/imgui) as its graphical backend.
+## Buildflags
 
-Standard Dear ImGui controller inputs are supported.
+### Logging
+Building via `make` only logs errors (via OSReport). To enable logging via the [LoggingModule](https://github.com/wiiu-env/LoggingModule) set `DEBUG` to `1` or `VERBOSE`.
 
-- A
-  - Activate/Open/Toggle
-  - Tweak value with D-Pad (+ L/R to tweak slower/faster)
-- B
-  - Cancel/Close/Exit
-- X
-  - Edit text / on-screen keyboard
-- Y
-  - Tap: Toggle menu
-  - Hold + L/R: Focus windows
-- Left Stick
-  - Scroll
-  - Move window (when holding Y)
-- D-Pad
-  - Move
-  - Tweak values (when activated with A)
-  - Resize window (when holding Y)
+`make` Logs errors only (via OSReport).  
+`make DEBUG=1` Enables information and error logging via [LoggingModule](https://github.com/wiiu-env/LoggingModule).  
+`make DEBUG=VERBOSE` Enables verbose information and error logging via [LoggingModule](https://github.com/wiiu-env/LoggingModule).
 
-## Latest Builds
+If the [LoggingModule](https://github.com/wiiu-env/LoggingModule) is not present, it'll fallback to UDP (Port 4405) and [CafeOS](https://github.com/wiiu-env/USBSerialLoggingModule) logging.
 
-NDS: https://mtheall.com/~mtheall/ftpd.nds
+## Building using the Dockerfile
 
-CIA: https://mtheall.com/~mtheall/ftpd.cia
+It's possible to use a docker image for building. This way you don't need anything installed on your host system.
 
-3DSX: https://mtheall.com/~mtheall/ftpd.3dsx
+```
+# Build docker image (only needed once)
+docker build . -t ftpiiuplugin-builder
 
-NRO: https://mtheall.com/~mtheall/ftpd.nro
+# make 
+docker run -it --rm -v ${PWD}:/project ftpiiuplugin-builder make
 
-CIA QR Code
+# make clean
+docker run -it --rm -v ${PWD}:/project ftpiiuplugin-builder make clean
+```
 
-![ftpd.cia](https://github.com/mtheall/ftpd/raw/master/ftpd-qr.png)
+## Format the code via docker
 
-## Classic Builds
+`docker run --rm -v ${PWD}:/src ghcr.io/wiiu-env/clang-format:13.0.0-2 -r ./src -i`
 
-Classic builds use a console instead of Dear ImGui.
+## Credits
 
-CIA: https://mtheall.com/~mtheall/ftpd-classic.cia
-
-3DSX: https://mtheall.com/~mtheall/ftpd-classic.3dsx
-
-NRO: https://mtheall.com/~mtheall/ftpd-classic.nro
-
-CIA QR Code
-
-![ftpd-classic.cia](https://github.com/mtheall/ftpd/raw/master/ftpd-classic-qr.png)
-
-## Build and install
-
-You must set up the [development environment](https://devkitpro.org/wiki/Getting_Started).
-
-### NDS
-
-The following pacman packages are required to build `nds/ftpd.nds`:
-
-	devkitARM
-	dswifi
-	libfat-nds
-	libnds
-
-They are available as part of the `nds-dev` meta-package.
-
-### 3DSX
-
-The following pacman packages are required to build `3ds/ftpd.3dsx`:
-
-    3dstools
-    devkitARM
-    libctru
-
-They are available as part of the `3ds-dev` meta-package.
-
-Build `3ds/ftpd.3dsx`:
-
-    make 3dsx
-
-### NRO
-
-The following pacman packages are required to build `switch/ftpd.nro`:
-
-    devkitA64
-    libnx
-    switch-tools
-    switch-libzstd
-
-The first three are available as part of the `switch-dev` meta-package. Additionally, ImageMagick is required for converting assets.
-
-Build `switch/ftpd.nro`:
-
-    make nro
-
-## Supported Commands
-
-- ABOR
-- ALLO (no-op)
-- APPE
-- CDUP
-- CWD
-- DELE
-- FEAT
-- HELP
-- LIST
-- MDTM
-- MKD
-- MLSD
-- MLST
-- MODE (no-op)
-- NLST
-- NOOP
-- OPTS
-- PASS (no-op)
-- PASV
-- PORT
-- PWD
-- QUIT
-- REST
-- RETR
-- RMD
-- RNFR
-- RNTO
-- SITE
-- SIZE
-- STAT
-- STOR
-- STRU (no-op)
-- SYST
-- TYPE (no-op)
-- USER (no-op)
-- XCUP
-- XCWD
-- XMKD
-- XPWD
-- XRMD
-
-## Planned Commands
-
-- STOU
-
-## SITE commands
-
-- Show help:    SITE HELP
-- Set username: SITE USER <NAME>
-- Set password: SITE PASS <PASS>
-- Set port:     SITE PORT <PORT>
-- Set getMTime*: SITE MTIME [0|1]
-- Save config:  SITE SAVE
-
-*getMTime only on 3DS. Enabling will give timestamps at the expense of slow listings.
+This plugin is based on [ftpd](https://github.com/mtheall/ftpd) by mtheall
