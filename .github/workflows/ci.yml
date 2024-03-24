@@ -1,0 +1,59 @@
+name: CI-Release
+
+on:
+  push:
+    branches:
+      - main
+    
+jobs:
+  clang-format:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: actions/checkout@v3
+    - name: clang-format
+      run: |
+        docker run --rm -v ${PWD}:/src ghcr.io/wiiu-env/clang-format:13.0.0-2 -r ./source ./include
+  build-binary:
+    runs-on: ubuntu-22.04
+    needs: clang-format
+    steps:
+    - uses: actions/checkout@v3
+    - name: create version.h
+      run: |
+        git_hash=$(git rev-parse --short "$GITHUB_SHA")
+        cat <<EOF > ./source/wiiu/version.h
+        #pragma once
+        #define VERSION_EXTRA " (nightly-$git_hash)"
+        EOF
+    - name: build binary
+      run: |
+        docker build . -t builder
+        docker run --rm -v ${PWD}:/project builder make
+    - uses: actions/upload-artifact@master
+      with:
+       name: binary
+       path: "*.wps"
+  deploy-binary:
+    needs: build-binary
+    runs-on: ubuntu-22.04
+    steps:   
+    - name: Get environment variables
+      id: get_repository_name
+      run: |
+        echo REPOSITORY_NAME=$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//") >> $GITHUB_ENV
+        echo DATETIME=$(echo $(date '+%Y%m%d-%H%M%S')) >> $GITHUB_ENV 
+    - uses: actions/download-artifact@master
+      with:
+        name: binary
+    - name: zip artifact
+      run: zip -r ${{ env.REPOSITORY_NAME }}_${{ env.DATETIME }}.zip *.wps
+    - name: Create Release
+      uses: "softprops/action-gh-release@v1"
+      with:
+        tag_name: ${{ env.REPOSITORY_NAME }}-${{ env.DATETIME }}
+        draft: false
+        prerelease: true
+        generate_release_notes: true
+        name: Nightly-${{ env.REPOSITORY_NAME }}-${{ env.DATETIME }}
+        files: |
+          ./${{ env.REPOSITORY_NAME }}_${{ env.DATETIME }}.zip

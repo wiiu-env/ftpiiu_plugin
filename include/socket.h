@@ -102,6 +102,8 @@ public:
 	/// \param nonBlocking_ Whether to set non-blocking
 	bool setNonBlocking (bool nonBlocking_ = true);
 
+	bool setWinScale (const int val);
+
 	/// \brief Set reuse address in subsequent bind
 	/// \param reuse_ Whether to reuse address
 	bool setReuseAddress (bool reuse_ = true);

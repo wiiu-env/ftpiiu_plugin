@@ -20,11 +20,14 @@
 
 #include "ftpSession.h"
 
+#include "IOAbstraction.h"
 #include "ftpServer.h"
 #include "log.h"
 #include "platform.h"
 
+#ifndef __WIIU__
 #include "imgui.h"
+#endif
 
 #include <arpa/inet.h>
 #include <sys/stat.h>
@@ -34,6 +37,9 @@
 #include <cerrno>
 #include <chrono>
 #include <cinttypes>
+#ifdef __WIIU__
+#include <coreinit/filesystem_fsa.h>
+#endif
 #include <cstdarg>
 #include <cstring>
 #include <ctime>
@@ -169,7 +175,7 @@ std::string resolvePath (std::string_view const path_)
 
 	// make sure parent is a directory
 	struct stat st;
-	if (::stat (dirName (path_).c_str (), &st) != 0)
+	if (IOAbstraction::stat (dirName (path_).c_str (), &st) != 0)
 		return {};
 
 	if (!S_ISDIR (st.st_mode))
@@ -582,10 +588,20 @@ bool FtpSession::poll (std::vector<UniqueFtpSession> const &sessions_)
 					}
 					else if (i.revents & (POLLIN | POLLOUT))
 					{
-						for (unsigned i = 0; i < 10; ++i)
+						auto start_time = std::chrono::high_resolution_clock::now ();
+						while (true)
 						{
 							if (!((*session).*(session->m_transfer)) ())
+							{
 								break;
+							}
+
+							if (std::chrono::duration_cast<std::chrono::microseconds> (
+							        std::chrono::high_resolution_clock::now () - start_time) >
+							    5000ms)
+							{
+								break;
+							}
 						}
 					}
 					break;
@@ -640,7 +656,9 @@ void FtpSession::closeSocket (SharedSocket &socket_)
 	if (socket_ && socket_.unique ())
 	{
 		socket_->shutdown (SHUT_WR);
+#ifndef __WIIU__
 		socket_->setLinger (true, 0s);
+#endif
 		LOCKED (m_pendingCloseSocket.emplace_back (std::move (socket_)));
 	}
 	else
@@ -685,7 +703,7 @@ bool FtpSession::changeDir (char const *const args_)
 		return false;
 
 	struct stat st;
-	if (::stat (path.c_str (), &st) != 0)
+	if (IOAbstraction::stat (path.c_str (), &st) != 0)
 		return false;
 
 	if (!S_ISDIR (st.st_mode))
@@ -719,6 +737,9 @@ bool FtpSession::dataAccept ()
 	}
 
 #ifndef __3DS__
+#ifdef __WIIU__
+	m_dataSocket->setWinScale (1);
+#endif
 	m_dataSocket->setRecvBufferSize (SOCK_BUFFERSIZE);
 	m_dataSocket->setSendBufferSize (SOCK_BUFFERSIZE);
 #endif
@@ -747,6 +768,9 @@ bool FtpSession::dataConnect ()
 	if (!m_dataSocket)
 		return false;
 
+#ifdef __WIIU__
+	m_dataSocket->setWinScale (1);
+#endif
 	m_dataSocket->setRecvBufferSize (SOCK_BUFFERSIZE);
 	m_dataSocket->setSendBufferSize (SOCK_BUFFERSIZE);
 
@@ -793,7 +817,7 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 					type_ = "file";
 				else if (S_ISDIR (st_.st_mode))
 					type_ = "dir";
-#if !defined(__3DS__) && !defined(__SWITCH__)
+#if !defined(__3DS__) && !defined(__SWITCH__) && !defined(__WIIU__)
 				else if (S_ISLNK (st_.st_mode))
 					type_ = "os.unix=symlink";
 				else if (S_ISCHR (st_.st_mode))
@@ -989,7 +1013,7 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 		    // clang-format off
 		    S_ISREG (st_.st_mode)  ? '-' :
 		    S_ISDIR (st_.st_mode)  ? 'd' :
-#if !defined(__3DS__) && !defined(__SWITCH__)
+#if !defined(__3DS__) && !defined(__SWITCH__) && !defined(__WIIU__)
 		    S_ISLNK (st_.st_mode)  ? 'l' :
 		    S_ISCHR (st_.st_mode)  ? 'c' :
 		    S_ISBLK (st_.st_mode)  ? 'b' :
@@ -1054,7 +1078,7 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 int FtpSession::fillDirent (std::string const &path_, char const *type_)
 {
 	struct stat st;
-	if (::stat (path_.c_str (), &st) != 0)
+	if (IOAbstraction::stat (path_.c_str (), &st) != 0)
 		return errno;
 
 	return fillDirent (st, encodePath (path_), type_);
@@ -1081,7 +1105,7 @@ void FtpSession::xferFile (char const *const args_, XferFileMode const mode_)
 	{
 		// stat the file
 		struct stat st;
-		if (::stat (path.c_str (), &st) != 0)
+		if (IOAbstraction::stat (path.c_str (), &st) != 0)
 		{
 			sendResponse ("450 %s\r\n", std::strerror (errno));
 			return;
@@ -1219,7 +1243,7 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 		}
 
 		struct stat st;
-		if (::stat (path.c_str (), &st) != 0)
+		if (IOAbstraction::stat (path.c_str (), &st) != 0)
 		{
 			sendResponse ("550 %s\r\n", std::strerror (errno));
 			setState (State::COMMAND, true, true);
@@ -1613,6 +1637,44 @@ void FtpSession::sendResponse (std::string_view const response_)
 	m_responseBuffer.markUsed (response_.size ());
 }
 
+#ifdef __WIIU__
+#ifndef FSA_DIRITER_MAGIC
+#define FSA_DIRITER_MAGIC 0x77696975
+#endif
+
+// TODO: make this less hacky. Ideally this should be handled by newlib.
+typedef struct
+{
+	uint32_t magic;
+	FSADirectoryHandle fd;
+	FSADirectoryEntry entry_data;
+	// Some fields are missing here!!!!
+} __wut_fsa_dir_incomplete_t;
+
+extern "C" void __wut_fsa_translate_stat (FSAClientHandle clientHandle,
+    FSStat *fsStat,
+    ino_t ino,
+    struct stat *posStat);
+
+static bool __wut_fsa_get_stat_from_dir (DIR *dp, struct stat *posStat)
+{
+	if (dp == NULL || dp->dirData == NULL || dp->dirData->dirStruct == NULL || posStat == NULL)
+	{
+		return false;
+	}
+
+	auto const magic = *(uint32_t *)(dp->dirData->dirStruct);
+	if (magic == FSA_DIRITER_MAGIC)
+	{
+		__wut_fsa_dir_incomplete_t *dir = (__wut_fsa_dir_incomplete_t *)dp->dirData->dirStruct;
+		__wut_fsa_translate_stat (0, &dir->entry_data.info, 0, posStat);
+		return true;
+	}
+
+	return false;
+}
+#endif
+
 bool FtpSession::listTransfer ()
 {
 	// check if we sent all available data
@@ -1668,9 +1730,16 @@ bool FtpSession::listTransfer ()
 		{
 			// build the path
 			auto const fullPath = buildPath (m_lwd, dent->d_name);
-			struct stat st;
-
-#ifdef __3DS__
+			struct stat st      = {};
+#ifdef __WIIU__
+			auto const dp = static_cast<DIR *> (m_dir);
+			if (__wut_fsa_get_stat_from_dir (dp, &st))
+			{
+				// success!
+			}
+			else
+			{ // fallback to lstat
+#elifdef __3DS__
 			// the sdmc directory entry already has the type and size, so no need to do a slow stat
 			auto const dp    = static_cast<DIR *> (m_dir);
 			auto const magic = *reinterpret_cast<u32 *> (dp->dirData->dirStruct);
@@ -1717,51 +1786,55 @@ bool FtpSession::listTransfer ()
 				}
 			}
 			else
-#endif
-			    // lstat the entry
-			    if (::lstat (fullPath.c_str (), &st) != 0)
 			{
-#ifndef __SWITCH__
-				sendResponse ("550 %s\r\n", std::strerror (errno));
-				setState (State::COMMAND, true, true);
-				return false;
-#else
-				// probably archive bit set; list name with dummy stats
-				std::memset (&st, 0, sizeof (st));
-				error ("%s: type %u\n", dent->d_name, dent->d_type);
-				switch (dent->d_type)
-				{
-				case DT_BLK:
-					st.st_mode = S_IFBLK;
-					break;
-
-				case DT_CHR:
-					st.st_mode = S_IFCHR;
-					break;
-
-				case DT_DIR:
-					st.st_mode = S_IFDIR;
-					break;
-
-				case DT_FIFO:
-					st.st_mode = S_IFIFO;
-					break;
-
-				case DT_LNK:
-					st.st_mode = S_IFLNK;
-					break;
-
-				case DT_REG:
-				case DT_UNKNOWN:
-					st.st_mode = S_IFREG;
-					break;
-
-				case DT_SOCK:
-					st.st_mode = S_IFSOCK;
-					break;
-				}
 #endif
+				// lstat the entry
+				if (IOAbstraction::lstat (fullPath.c_str (), &st) != 0)
+				{
+#ifndef __SWITCH__
+					sendResponse ("550 %s\r\n", std::strerror (errno));
+					setState (State::COMMAND, true, true);
+					return false;
+#else
+					// probably archive bit set; list name with dummy stats
+					std::memset (&st, 0, sizeof (st));
+					error ("%s: type %u\n", dent->d_name, dent->d_type);
+					switch (dent->d_type)
+					{
+					case DT_BLK:
+						st.st_mode = S_IFBLK;
+						break;
+
+					case DT_CHR:
+						st.st_mode = S_IFCHR;
+						break;
+
+					case DT_DIR:
+						st.st_mode = S_IFDIR;
+						break;
+
+					case DT_FIFO:
+						st.st_mode = S_IFIFO;
+						break;
+
+					case DT_LNK:
+						st.st_mode = S_IFLNK;
+						break;
+
+					case DT_REG:
+					case DT_UNKNOWN:
+						st.st_mode = S_IFREG;
+						break;
+
+					case DT_SOCK:
+						st.st_mode = S_IFSOCK;
+						break;
+					}
+#endif
+				}
+#if defined(__WIIU__) || defined(__3DS__)
 			}
+#endif
 
 			auto const path = encodePath (dent->d_name);
 			auto const rc   = fillDirent (st, path);
@@ -1988,7 +2061,7 @@ void FtpSession::DELE (char const *args_)
 	}
 
 	// unlink the path
-	if (::unlink (path.c_str ()) != 0)
+	if (IOAbstraction::unlink (path.c_str ()) != 0)
 	{
 		sendResponse ("550 %s\r\n", std::strerror (errno));
 		return;
@@ -2072,7 +2145,7 @@ void FtpSession::MKD (char const *args_)
 	}
 
 	// create the directory
-	if (::mkdir (path.c_str (), 0755) != 0)
+	if (IOAbstraction::mkdir (path.c_str (), 0755) != 0)
 	{
 		sendResponse ("550 %s\r\n", std::strerror (errno));
 		return;
@@ -2255,7 +2328,10 @@ void FtpSession::PASV (char const *args_)
 		return;
 	}
 
-	// set the socket options
+	// set the socket option
+#ifdef __WIIU__
+	m_pasvSocket->setWinScale (1);
+#endif
 	m_pasvSocket->setRecvBufferSize (SOCK_BUFFERSIZE);
 	m_pasvSocket->setSendBufferSize (SOCK_BUFFERSIZE);
 
@@ -2267,7 +2343,7 @@ void FtpSession::PASV (char const *args_)
 		ephemeralPort = 5001;
 	addr.sin_port = htons (ephemeralPort++);
 #else
-	addr.sin_port = htons (0);
+		addr.sin_port = htons (0);
 #endif
 
 	// bind to the address
@@ -2486,7 +2562,7 @@ void FtpSession::RMD (char const *args_)
 	}
 
 	// remove the directory
-	if (::rmdir (path.c_str ()) != 0)
+	if (IOAbstraction::rmdir (path.c_str ()) != 0)
 	{
 		sendResponse ("550 %d %s\r\n", __LINE__, std::strerror (errno));
 		return;
@@ -2516,7 +2592,7 @@ void FtpSession::RNFR (char const *args_)
 
 	// make sure the path exists
 	struct stat st;
-	if (::lstat (path.c_str (), &st) != 0)
+	if (IOAbstraction::lstat (path.c_str (), &st) != 0)
 	{
 		sendResponse ("450 %s\r\n", std::strerror (errno));
 		return;
@@ -2554,7 +2630,7 @@ void FtpSession::RNTO (char const *args_)
 	}
 
 	// rename the file
-	if (::rename (m_rename.c_str (), path.c_str ()) != 0)
+	if (IOAbstraction::rename (m_rename.c_str (), path.c_str ()) != 0)
 	{
 		m_rename.clear ();
 		sendResponse ("550 %s\r\n", std::strerror (errno));
@@ -2711,7 +2787,7 @@ void FtpSession::SIZE (char const *args_)
 
 	// stat the path
 	struct stat st;
-	if (::stat (path.c_str (), &st) != 0)
+	if (IOAbstraction::stat (path.c_str (), &st) != 0)
 	{
 		sendResponse ("550 %s\r\n", std::strerror (errno));
 		return;

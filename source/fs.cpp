@@ -19,13 +19,14 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "fs.h"
+#include "IOAbstraction.h"
 
 #include <cassert>
 #include <cinttypes>
 #include <cstdio>
 #include <string>
 
-#if defined(NDS) || defined(__3DS__) || defined(__SWITCH__)
+#if defined(NDS) || defined(__3DS__) || defined(__SWITCH__) || defined(__WIIU__)
 #define getline __getline
 #endif
 
@@ -118,7 +119,7 @@ void fs::File::setBufferSize (std::size_t const size_)
 
 bool fs::File::open (char const *const path_, char const *const mode_)
 {
-	auto const fp = std::fopen (path_, mode_);
+	auto const fp = IOAbstraction::fopen (path_, mode_);
 	if (!fp)
 		return false;
 
@@ -137,7 +138,7 @@ void fs::File::close ()
 
 std::make_signed_t<std::size_t> fs::File::seek (std::size_t const pos_, int const origin_)
 {
-	return std::fseek (m_fp.get (), pos_, origin_);
+	return IOAbstraction::fseek (m_fp.get (), pos_, origin_);
 }
 
 std::make_signed_t<std::size_t> fs::File::read (void *const buffer_, std::size_t const size_)
@@ -145,7 +146,7 @@ std::make_signed_t<std::size_t> fs::File::read (void *const buffer_, std::size_t
 	assert (buffer_);
 	assert (size_ > 0);
 
-	return std::fread (buffer_, 1, size_, m_fp.get ());
+	return IOAbstraction::fread (buffer_, 1, size_, m_fp.get ());
 }
 
 std::make_signed_t<std::size_t> fs::File::read (IOBuffer &buffer_)
@@ -206,7 +207,7 @@ std::make_signed_t<std::size_t> fs::File::write (void const *const buffer_, std:
 	assert (buffer_);
 	assert (size_ > 0);
 
-	return std::fwrite (buffer_, 1, size_, m_fp.get ());
+	return IOAbstraction::fwrite (buffer_, 1, size_, m_fp.get ());
 }
 
 std::make_signed_t<std::size_t> fs::File::write (IOBuffer &buffer_)
@@ -262,11 +263,11 @@ fs::Dir::operator DIR * () const
 
 bool fs::Dir::open (char const *const path_)
 {
-	auto const dp = ::opendir (path_);
+	auto const dp = IOAbstraction::opendir (path_);
 	if (!dp)
 		return false;
 
-	m_dp = std::unique_ptr<DIR, int (*) (DIR *)> (dp, &::closedir);
+	m_dp = std::unique_ptr<DIR, int (*) (DIR *)> (dp, &IOAbstraction::closedir);
 	return true;
 }
 
@@ -278,5 +279,5 @@ void fs::Dir::close ()
 struct dirent *fs::Dir::read ()
 {
 	errno = 0;
-	return ::readdir (m_dp.get ());
+	return IOAbstraction::readdir (m_dp.get ());
 }

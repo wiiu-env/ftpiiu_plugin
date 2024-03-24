@@ -68,10 +68,10 @@ private:
 	constexpr static auto XFER_BUFFERSIZE = 8192;
 #else
 	/// \brief Response buffer size
-	constexpr static auto RESPONSE_BUFFERSIZE = 32768;
+	constexpr static auto RESPONSE_BUFFERSIZE = 16 * 1024;
 
 	/// \brief Transfer buffersize
-	constexpr static auto XFER_BUFFERSIZE = 65536;
+	constexpr static auto XFER_BUFFERSIZE = 32 * 1024;
 #endif
 
 	/// \brief File buffersize
@@ -238,7 +238,7 @@ private:
 	SockAddr m_portAddr;
 
 	/// \brief Current working directory
-	std::string m_cwd = "/";
+	std::string m_cwd = "/fs/vol/external01/";
 
 	/// \brief List working directory
 	std::string m_lwd;
