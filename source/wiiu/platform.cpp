@@ -24,6 +24,7 @@
 #include "IOAbstraction.h"
 #include "ftpServer.h"
 #include "log.h"
+#include "logger.h"
 
 #include <mocha/mocha.h>
 #include <nn/ac.h>
@@ -86,7 +87,8 @@ MochaUtilsStatus MountWrapper (const char *mount, const char *dev, const char *m
 	}
 	else
 	{
-		error ("Failed to mount %s: %s [%d]", mount, Mocha_GetStatusStr (res), res);
+		DEBUG_FUNCTION_LINE_ERR (
+		    "Failed to mount %s: %s [%d]", mount, Mocha_GetStatusStr (res), res);
 	}
 	return res;
 }
@@ -169,7 +171,8 @@ void start_server ()
 	}
 	else
 	{
-		OSReport ("Failed to init libmocha: %s [%d]\n", Mocha_GetStatusStr (res), res);
+		DEBUG_FUNCTION_LINE_ERR (
+		    "Failed to init libmocha: %s [%d]\n", Mocha_GetStatusStr (res), res);
 	}
 
 	server = FtpServer::create ();
@@ -209,7 +212,7 @@ static void gFTPServerRunningChanged (ConfigItemBoolean *item, bool newValue)
 	auto res = WUPSStorageAPI::Store (FTPIIU_ENABLED_STRING, sFTPServerEnabled);
 	if (res != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("Failed to store gFTPServerEnabled: %s (%d)\n",
+		DEBUG_FUNCTION_LINE_ERR ("Failed to store gFTPServerEnabled: %s (%d)\n",
 		    WUPSStorageAPI::GetStatusStr (res).data (),
 		    res);
 	}
@@ -232,7 +235,7 @@ static void gSystemFilesAllowedChanged (ConfigItemBoolean *item, bool newValue)
 	auto res = WUPSStorageAPI::Store (SYSTEM_FILES_ALLOWED_STRING, sSystemFilesAllowed);
 	if (res != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("Failed to store gSystemFilesAllowed: %s (%d)\n",
+		DEBUG_FUNCTION_LINE_ERR ("Failed to store gSystemFilesAllowed: %s (%d)\n",
 		    WUPSStorageAPI::GetStatusStr (res).data (),
 		    res);
 	}
@@ -300,6 +303,7 @@ INITIALIZE_PLUGIN ()
 	if (WUPSConfigAPI_Init (configOptions, ConfigMenuOpenedCallback, ConfigMenuClosedCallback) !=
 	    WUPSCONFIG_API_RESULT_SUCCESS)
 	{
+		DEBUG_FUNCTION_LINE_ERR ("Failed to init config api");
 		OSFatal ("ftpiiu plugin: Failed to init config api");
 	}
 
@@ -308,7 +312,7 @@ INITIALIZE_PLUGIN ()
 	         FTPIIU_ENABLED_STRING, sFTPServerEnabled, DEFAULT_FTPIIU_ENABLED_VALUE)) !=
 	    WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("ftpiiu plugin: Failed to get or create item \"%s\": %s (%d)\n",
+		DEBUG_FUNCTION_LINE_ERR ("Failed to get or create item \"%s\": %s (%d)\n",
 		    FTPIIU_ENABLED_STRING,
 		    WUPSStorageAPI_GetStatusStr (err),
 		    err);
@@ -317,7 +321,7 @@ INITIALIZE_PLUGIN ()
 	         sSystemFilesAllowed,
 	         DEFAULT_SYSTEM_FILES_ALLOWED_VALUE)) != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("ftpiiu plugin: Failed to get or create item \"%s\": %s (%d)\n",
+		DEBUG_FUNCTION_LINE_ERR ("Failed to get or create item \"%s\": %s (%d)\n",
 		    SYSTEM_FILES_ALLOWED_STRING,
 		    WUPSStorageAPI_GetStatusStr (err),
 		    err);
@@ -325,9 +329,8 @@ INITIALIZE_PLUGIN ()
 
 	if ((err = WUPSStorageAPI::SaveStorage ()) != WUPS_STORAGE_ERROR_SUCCESS)
 	{
-		OSReport ("ftpiiu plugin: Failed to save storage: %s (%d)\n",
-		    WUPSStorageAPI_GetStatusStr (err),
-		    err);
+		DEBUG_FUNCTION_LINE_ERR (
+		    "Failed to save storage: %s (%d)\n", WUPSStorageAPI_GetStatusStr (err), err);
 	}
 }
 
@@ -343,6 +346,7 @@ void wiiu_init ()
 
 ON_APPLICATION_START ()
 {
+	initLogging ();
 	nn::ac::Initialize ();
 	nn::ac::ConnectAsync ();
 
@@ -352,6 +356,7 @@ ON_APPLICATION_START ()
 ON_APPLICATION_ENDS ()
 {
 	stop_server ();
+	deinitLogging ();
 }
 
 bool platform::init ()

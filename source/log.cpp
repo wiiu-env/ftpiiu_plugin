@@ -50,7 +50,7 @@ bool s_logUpdated = true;
 
 /// \brief Message prefix
 static char const *const s_prefix[] = {
-    [DEBUG]    = "[DEBUG]",
+    [DEBUGLOG] = "[DEBUG]",
     [INFO]     = "[INFO]",
     [ERROR]    = "[ERROR]",
     [COMMAND]  = "[COMMAND]",
@@ -114,7 +114,7 @@ void drawLog ()
 
 #ifdef CLASSIC
 	char const *const s_colors[] = {
-	    [DEBUG]    = "\x1b[33;1m", // yellow
+	    [DEBUGLOG] = "\x1b[33;1m", // yellow
 	    [INFO]     = "\x1b[37;1m", // white
 	    [ERROR]    = "\x1b[31;1m", // red
 	    [COMMAND]  = "\x1b[32;1m", // green
@@ -204,7 +204,7 @@ void debug (char const *const fmt_, ...)
 	va_list ap;
 
 	va_start (ap, fmt_);
-	addLog (DEBUG, fmt_, ap);
+	addLog (DEBUGLOG, fmt_, ap);
 	va_end (ap);
 #endif
 }
