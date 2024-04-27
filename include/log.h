@@ -27,7 +27,7 @@
 /// \brief Log level
 enum LogLevel
 {
-	DEBUG,
+	DEBUGLOG,
 	INFO,
 	ERROR,
 	COMMAND,
