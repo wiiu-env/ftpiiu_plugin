@@ -31,6 +31,9 @@ public:
 		}
 		mDir = {};
 		snprintf (mDir.d_name, sizeof (mDir.d_name), "%s", mCurIterator->c_str ());
+#ifdef _DIRENT_HAVE_D_STAT
+		mDir.d_stat.st_mode = _IFDIR;
+#endif
 		mCurIterator++;
 		mDirPtr.position++;
 		return &mDir;
