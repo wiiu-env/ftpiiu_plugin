@@ -48,7 +48,7 @@ jobs:
     - name: zip artifact
       run: zip -r ${{ env.REPOSITORY_NAME }}_${{ env.DATETIME }}.zip *.wps
     - name: Create Release
-      uses: "softprops/action-gh-release@v1"
+      uses: "softprops/action-gh-release@v2"
       with:
         tag_name: ${{ env.REPOSITORY_NAME }}-${{ env.DATETIME }}
         draft: false
