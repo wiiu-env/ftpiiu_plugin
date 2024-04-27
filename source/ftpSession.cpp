@@ -1637,44 +1637,6 @@ void FtpSession::sendResponse (std::string_view const response_)
 	m_responseBuffer.markUsed (response_.size ());
 }
 
-#ifdef __WIIU__
-#ifndef FSA_DIRITER_MAGIC
-#define FSA_DIRITER_MAGIC 0x77696975
-#endif
-
-// TODO: make this less hacky. Ideally this should be handled by newlib.
-typedef struct
-{
-	uint32_t magic;
-	FSADirectoryHandle fd;
-	FSADirectoryEntry entry_data;
-	// Some fields are missing here!!!!
-} __wut_fsa_dir_incomplete_t;
-
-extern "C" void __wut_fsa_translate_stat (FSAClientHandle clientHandle,
-    FSStat *fsStat,
-    ino_t ino,
-    struct stat *posStat);
-
-static bool __wut_fsa_get_stat_from_dir (DIR *dp, struct stat *posStat)
-{
-	if (dp == NULL || dp->dirData == NULL || dp->dirData->dirStruct == NULL || posStat == NULL)
-	{
-		return false;
-	}
-
-	auto const magic = *(uint32_t *)(dp->dirData->dirStruct);
-	if (magic == FSA_DIRITER_MAGIC)
-	{
-		__wut_fsa_dir_incomplete_t *dir = (__wut_fsa_dir_incomplete_t *)dp->dirData->dirStruct;
-		__wut_fsa_translate_stat (0, &dir->entry_data.info, 0, posStat);
-		return true;
-	}
-
-	return false;
-}
-#endif
-
 bool FtpSession::listTransfer ()
 {
 	// check if we sent all available data
@@ -1730,114 +1692,20 @@ bool FtpSession::listTransfer ()
 		{
 			// build the path
 			auto const fullPath = buildPath (m_lwd, dent->d_name);
-			struct stat st      = {};
-#ifdef __WIIU__
-			auto const dp = static_cast<DIR *> (m_dir);
-			if (__wut_fsa_get_stat_from_dir (dp, &st))
-			{
-				// success!
-			}
-			else
-			{ // fallback to lstat
-#elifdef __3DS__
-			// the sdmc directory entry already has the type and size, so no need to do a slow stat
-			auto const dp    = static_cast<DIR *> (m_dir);
-			auto const magic = *reinterpret_cast<u32 *> (dp->dirData->dirStruct);
-
-			if (magic == ARCHIVE_DIRITER_MAGIC)
-			{
-				auto const dir   = reinterpret_cast<archive_dir_t const *> (dp->dirData->dirStruct);
-				auto const entry = &dir->entry_data[dir->index];
-
-				if (entry->attributes & FS_ATTRIBUTE_DIRECTORY)
-					st.st_mode = S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH;
-				else
-					st.st_mode = S_IFREG | S_IRUSR | S_IRGRP | S_IROTH;
-
-				if (!(entry->attributes & FS_ATTRIBUTE_READ_ONLY))
-					st.st_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
-
-				st.st_size  = entry->fileSize;
-				st.st_mtime = 0;
-
-				bool getmtime = true;
-				if (m_xferDirMode == XferDirMode::MLSD || m_xferDirMode == XferDirMode::MLST)
-				{
-					if (!m_mlstModify)
-						getmtime = false;
-				}
-				else if (m_xferDirMode == XferDirMode::NLST)
-					getmtime = false;
-
-				{
-					auto const lock = m_config.lockGuard ();
-					if (!m_config.getMTime ())
-						getmtime = false;
-				}
-
-				if (getmtime)
-				{
-					std::uint64_t mtime = 0;
-					auto const rc       = archive_getmtime (fullPath.c_str (), &mtime);
-					if (rc != 0)
-						error ("sdmc_getmtime %s 0x%lx\n", fullPath.c_str (), rc);
-					else
-						st.st_mtime = mtime;
-				}
-			}
-			else
-			{
-#endif
-				// lstat the entry
-				if (IOAbstraction::lstat (fullPath.c_str (), &st) != 0)
-				{
-#ifndef __SWITCH__
-					sendResponse ("550 %s\r\n", std::strerror (errno));
-					setState (State::COMMAND, true, true);
-					return false;
+			auto const path     = encodePath (dent->d_name);
+#ifdef _DIRENT_HAVE_D_STAT
+			auto const rc = fillDirent (dent->d_stat, path);
 #else
-					// probably archive bit set; list name with dummy stats
-					std::memset (&st, 0, sizeof (st));
-					error ("%s: type %u\n", dent->d_name, dent->d_type);
-					switch (dent->d_type)
-					{
-					case DT_BLK:
-						st.st_mode = S_IFBLK;
-						break;
-
-					case DT_CHR:
-						st.st_mode = S_IFCHR;
-						break;
-
-					case DT_DIR:
-						st.st_mode = S_IFDIR;
-						break;
-
-					case DT_FIFO:
-						st.st_mode = S_IFIFO;
-						break;
-
-					case DT_LNK:
-						st.st_mode = S_IFLNK;
-						break;
-
-					case DT_REG:
-					case DT_UNKNOWN:
-						st.st_mode = S_IFREG;
-						break;
-
-					case DT_SOCK:
-						st.st_mode = S_IFSOCK;
-						break;
-					}
-#endif
-				}
-#if defined(__WIIU__) || defined(__3DS__)
+			struct stat st = {};
+			// lstat the entry
+			if (IOAbstraction::lstat (fullPath.c_str (), &st) != 0)
+			{
+				sendResponse ("550 %s\r\n", std::strerror (errno));
+				setState (State::COMMAND, true, true);
+				return false;
 			}
+			auto const rc = fillDirent (st, path);
 #endif
-
-			auto const path = encodePath (dent->d_name);
-			auto const rc   = fillDirent (st, path);
 			if (rc != 0)
 			{
 				sendResponse ("425 %s\r\n", std::strerror (errno));
@@ -2343,7 +2211,7 @@ void FtpSession::PASV (char const *args_)
 		ephemeralPort = 5001;
 	addr.sin_port = htons (ephemeralPort++);
 #else
-		addr.sin_port = htons (0);
+	addr.sin_port = htons (0);
 #endif
 
 	// bind to the address
