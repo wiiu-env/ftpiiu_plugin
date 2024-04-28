@@ -183,6 +183,18 @@ int IOAbstraction::stat (const char *path, struct stat *sbuf)
 	auto r             = ::stat (convertedPath.c_str (), sbuf);
 	if (r < 0)
 	{
+		if (errno == EPERM)
+		{
+			auto *dir = ::opendir (convertedPath.c_str ());
+			if (dir)
+			{
+				*sbuf = {};
+				// TODO: init other values?
+				sbuf->st_mode = _IFDIR;
+				::closedir (dir);
+				return 0;
+			}
+		}
 		if (sVirtualDirs.contains (convertedPath))
 		{
 			*sbuf = {};

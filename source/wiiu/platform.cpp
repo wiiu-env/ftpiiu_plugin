@@ -28,6 +28,7 @@
 
 #include <mocha/mocha.h>
 #include <nn/ac.h>
+#include <nn/act.h>
 #include <thread>
 
 #include <coreinit/thread.h>
@@ -159,6 +160,8 @@ void start_server ()
 				virtualDirsInRoot.emplace_back ("storage_usb");
 				IOAbstraction::addVirtualPath ("storage_usb:/", {});
 			}
+
+			sMochaPathsWereMounted = true;
 		}
 		virtualDirsInRoot.emplace_back ("fs");
 		IOAbstraction::addVirtualPath (":/", virtualDirsInRoot);
@@ -167,7 +170,22 @@ void start_server ()
 		    "fs:/vol", std::vector<std::string>{"external01", "content", "save"});
 
 		IOAbstraction::addVirtualPath ("fs:/vol/content", {});
-		sMochaPathsWereMounted = true;
+
+		std::vector<std::string> virtualDirsInSave;
+		virtualDirsInSave.emplace_back ("common");
+		nn::act::Initialize ();
+		for (int32_t i = 0; i < 13; i++)
+		{
+			if (!nn::act::IsSlotOccupied (i))
+			{
+				continue;
+			}
+			char buffer[9];
+			snprintf (buffer, sizeof (buffer), "%08X", nn::act::GetPersistentIdEx (i));
+			virtualDirsInSave.emplace_back (buffer);
+		}
+		nn::act::Finalize ();
+		IOAbstraction::addVirtualPath ("fs:/vol/save", virtualDirsInSave);
 	}
 	else
 	{
