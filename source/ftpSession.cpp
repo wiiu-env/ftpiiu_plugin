@@ -854,11 +854,15 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 
 			pos += rc;
 		}
-
+		auto mtime = st_.st_mtime;
+		if (mtime > 0x2208985200L)
+		{
+			mtime = time (0);
+		}
 		// mtime fact
 		if (m_mlstModify)
 		{
-			auto const tm = std::gmtime (&st_.st_mtime);
+			auto const tm = std::gmtime (&mtime);
 			if (!tm)
 				return errno;
 
@@ -1000,6 +1004,9 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 #elif defined(__SWITCH__)
 		auto const owner = "Switch";
 		auto const group = "Switch";
+#elif defined(__WIIU__)
+		auto const owner = "Wii U";
+		auto const group = "Wii U";
 #else
 		char owner[32];
 		char group[32];
@@ -1043,13 +1050,19 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 
 		pos += rc;
 
+		auto mtime = st_.st_mtime;
+		if (mtime > 0x2208985200L)
+		{
+			mtime = time (0);
+		}
+
 		// timestamp
-		auto const tm = std::gmtime (&st_.st_mtime);
+		auto const tm = std::gmtime (&mtime);
 		if (!tm)
 			return errno;
 
 		auto fmt = "%b %e %Y ";
-		if (m_timestamp > st_.st_mtime && m_timestamp - st_.st_mtime < (60 * 60 * 24 * 365 / 2))
+		if (m_timestamp > mtime && m_timestamp - mtime < (60 * 60 * 24 * 365 / 2))
 			fmt = "%b %e %H:%M ";
 		rc = std::strftime (&buffer[pos], size - pos, fmt, tm);
 		if (rc < 0)
