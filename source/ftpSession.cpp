@@ -1005,8 +1005,8 @@ int FtpSession::fillDirent (struct stat const &st_, std::string_view const path_
 		auto const owner = "Switch";
 		auto const group = "Switch";
 #elif defined(__WIIU__)
-		auto const owner = "Wii U";
-		auto const group = "Wii U";
+		auto const owner = "WiiU";
+		auto const group = "WiiU";
 #else
 		char owner[32];
 		char group[32];
