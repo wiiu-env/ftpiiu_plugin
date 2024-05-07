@@ -248,7 +248,7 @@ void response (char const *const fmt_, ...)
 void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 {
 #ifdef NDEBUG
-	if (level_ == DEBUG)
+	if (level_ == DEBUGLOG)
 		return;
 #endif
 #ifndef NDS
@@ -278,7 +278,7 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 void addLog (LogLevel const level_, std::string_view const message_)
 {
 #ifdef NDEBUG
-	if (level_ == DEBUG)
+	if (level_ == DEBUGLOG)
 		return;
 #endif
 
