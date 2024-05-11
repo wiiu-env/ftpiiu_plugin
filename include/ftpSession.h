@@ -238,7 +238,7 @@ private:
 	SockAddr m_portAddr;
 
 	/// \brief Current working directory
-	std::string m_cwd = "/fs/vol/external01/";
+	std::string m_cwd = "/";
 
 	/// \brief List working directory
 	std::string m_lwd;
