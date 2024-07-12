@@ -19,9 +19,10 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "socket.h"
-
 #include "log.h"
+#include "platform.h"
 
+#include <chrono>
 #include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -30,6 +31,8 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+
+using namespace std::chrono_literals;
 
 ///////////////////////////////////////////////////////////////////////////
 Socket::~Socket ()
@@ -100,6 +103,7 @@ bool Socket::bind (SockAddr const &addr_)
 	case AF_INET:
 		if (::bind (m_fd, addr_, sizeof (struct sockaddr_in)) != 0)
 		{
+			platform::Thread::sleep (5000ms);
 			error ("bind: %s\n", std::strerror (errno));
 			return false;
 		}
@@ -110,6 +114,7 @@ bool Socket::bind (SockAddr const &addr_)
 		if (::bind (m_fd, addr_, sizeof (struct sockaddr_in6)) != 0)
 		{
 			error ("bind: %s\n", std::strerror (errno));
+			platform::Thread::sleep (5000ms);
 			return false;
 		}
 		break;
