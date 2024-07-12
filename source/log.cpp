@@ -41,7 +41,7 @@ namespace
 constexpr auto MAX_LOGS = 250;
 #else
 /// \brief Maximum number of log messages to keep
-constexpr auto MAX_LOGS = 10000;
+constexpr auto MAX_LOGS = 100;
 #endif
 
 #ifdef CLASSIC
@@ -97,9 +97,7 @@ void drawLog ()
 #endif
 
 	auto const maxLogs =
-#ifdef __WIIU__
-	    1000;
-#elif defined(CLASSIC)
+#if defined(CLASSIC) && !defined(__WIIU__)
 	    g_logConsole.windowHeight;
 #else
 	    MAX_LOGS;
@@ -247,6 +245,10 @@ void response (char const *const fmt_, ...)
 
 void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 {
+#ifdef __WIIU__
+	// the plugin is currently never calling drawLogs
+	return;
+#endif
 #ifdef NDEBUG
 	if (level_ == DEBUGLOG)
 		return;
@@ -277,6 +279,10 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 
 void addLog (LogLevel const level_, std::string_view const message_)
 {
+#ifdef __WIIU__
+	// the plugin is currently never calling drawLogs
+	return;
+#endif
 #ifdef NDEBUG
 	if (level_ == DEBUGLOG)
 		return;
