@@ -1230,26 +1230,27 @@ void FtpSession::xferDir (char const *const args_, XferDirMode const mode_, bool
 	if (std::strlen (args_) > 0)
 	{
 		// an argument was provided
+
+		// work around broken clients that think LIST -a/-l is valid
+		if (workaround_)
+		{
+			if (args_[0] == '-' && (args_[1] == 'a' || args_[1] == 'l'))
+			{
+				char const *args = &args_[2];
+				if (*args == '\0' || *args == ' ')
+				{
+					if (*args == ' ')
+						++args;
+
+					xferDir (args, mode_, false);
+					return;
+				}
+			}
+		}
+
 		auto const path = buildResolvedPath (m_cwd, args_);
 		if (path.empty ())
 		{
-			// work around broken clients that think LIST -a/-l is valid
-			if (workaround_)
-			{
-				if (args_[0] == '-' && (args_[1] == 'a' || args_[1] == 'l'))
-				{
-					char const *args = &args_[2];
-					if (*args == '\0' || *args == ' ')
-					{
-						if (*args == ' ')
-							++args;
-
-						xferDir (args, mode_, false);
-						return;
-					}
-				}
-			}
-
 			sendResponse ("550 %s\r\n", std::strerror (errno));
 			setState (State::COMMAND, true, true);
 			return;
