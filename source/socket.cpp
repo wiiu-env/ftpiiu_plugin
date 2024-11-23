@@ -3,7 +3,7 @@
 // - RFC 3659 (https://tools.ietf.org/html/rfc3659)
 // - suggested implementation details from https://cr.yp.to/ftp/filesystem.html
 //
-// Copyright (C) 2020 Michael Theall
+// Copyright (C) 2024 Michael Theall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 
 #include <chrono>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -43,7 +44,7 @@ Socket::~Socket ()
 	if (m_connected)
 		info ("Closing connection to [%s]:%u\n", m_peerName.name (), m_peerName.port ());
 
-#ifdef NDS
+#ifdef __NDS__
 	if (::closesocket (m_fd) != 0)
 		error ("closesocket: %s\n", std::strerror (errno));
 #else
@@ -68,7 +69,7 @@ Socket::Socket (int const fd_, SockAddr const &sockName_, SockAddr const &peerNa
 UniqueSocket Socket::accept ()
 {
 	SockAddr addr;
-	socklen_t addrLen = sizeof (struct sockaddr_storage);
+	socklen_t addrLen = sizeof (sockaddr_storage);
 
 	auto const fd = ::accept (m_fd, addr, &addrLen);
 	if (fd < 0)
@@ -83,7 +84,7 @@ UniqueSocket Socket::accept ()
 
 int Socket::atMark ()
 {
-#ifdef NDS
+#ifdef __NDS__
 	errno = ENOSYS;
 	return -1;
 #else
@@ -98,38 +99,16 @@ int Socket::atMark ()
 
 bool Socket::bind (SockAddr const &addr_)
 {
-	switch (static_cast<struct sockaddr_storage const &> (addr_).ss_family)
+	if (::bind (m_fd, addr_, addr_.size ()) != 0)
 	{
-	case AF_INET:
-		if (::bind (m_fd, addr_, sizeof (struct sockaddr_in)) != 0)
-		{
-			platform::Thread::sleep (5000ms);
-			error ("bind: %s\n", std::strerror (errno));
-			return false;
-		}
-		break;
-
-#ifndef NO_IPV6
-	case AF_INET6:
-		if (::bind (m_fd, addr_, sizeof (struct sockaddr_in6)) != 0)
-		{
-			error ("bind: %s\n", std::strerror (errno));
-			platform::Thread::sleep (5000ms);
-			return false;
-		}
-		break;
-#endif
-
-	default:
-		errno = EINVAL;
 		error ("bind: %s\n", std::strerror (errno));
-		break;
+		return false;
 	}
 
 	if (addr_.port () == 0)
 	{
 		// get socket name due to request for ephemeral port
-		socklen_t addrLen = sizeof (struct sockaddr_storage);
+		socklen_t addrLen = sizeof (sockaddr_storage);
 		if (::getsockname (m_fd, m_sockName, &addrLen) != 0)
 			error ("getsockname: %s\n", std::strerror (errno));
 	}
@@ -141,7 +120,7 @@ bool Socket::bind (SockAddr const &addr_)
 
 bool Socket::connect (SockAddr const &addr_)
 {
-	if (::connect (m_fd, addr_, sizeof (struct sockaddr_storage)) != 0)
+	if (::connect (m_fd, addr_, addr_.size ()) != 0)
 	{
 		if (errno != EINPROGRESS)
 			error ("connect: %s\n", std::strerror (errno));
@@ -185,11 +164,13 @@ bool Socket::shutdown (int const how_)
 
 bool Socket::setLinger (bool const enable_, std::chrono::seconds const time_)
 {
-#ifdef NDS
+#ifdef __NDS__
+	(void)enable_;
+	(void)time_;
 	errno = ENOSYS;
 	return -1;
 #else
-	struct linger linger;
+	linger linger;
 	linger.l_onoff  = enable_;
 	linger.l_linger = time_.count ();
 
@@ -209,7 +190,7 @@ bool Socket::setLinger (bool const enable_, std::chrono::seconds const time_)
 
 bool Socket::setNonBlocking (bool const nonBlocking_)
 {
-#ifdef NDS
+#ifdef __NDS__
 	unsigned long enable = nonBlocking_;
 
 	auto const rc = ::ioctl (m_fd, FIONBIO, &enable);
@@ -290,6 +271,38 @@ bool Socket::setSendBufferSize (std::size_t const size_)
 	return true;
 }
 
+#ifndef __NDS__
+bool Socket::joinMulticastGroup (SockAddr const &addr_, SockAddr const &iface_)
+{
+	ip_mreq group;
+	group.imr_multiaddr = static_cast<sockaddr_in const &> (addr_).sin_addr;
+	group.imr_interface = static_cast<sockaddr_in const &> (iface_).sin_addr;
+
+	if (::setsockopt (m_fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &group, sizeof (group)) != 0)
+	{
+		error ("setsockopt(IP_ADD_MEMBERSHIP, %s): %s\n", addr_.name (), std::strerror (errno));
+		return false;
+	}
+
+	return true;
+}
+
+bool Socket::dropMulticastGroup (SockAddr const &addr_, SockAddr const &iface_)
+{
+	ip_mreq group;
+	group.imr_multiaddr = static_cast<sockaddr_in const &> (addr_).sin_addr;
+	group.imr_interface = static_cast<sockaddr_in const &> (iface_).sin_addr;
+
+	if (::setsockopt (m_fd, IPPROTO_IP, IP_DROP_MEMBERSHIP, &group, sizeof (group)) != 0)
+	{
+		error ("setsockopt(IP_DROP_MEMBERSHIP, %s): %s\n", addr_.name (), std::strerror (errno));
+		return false;
+	}
+
+	return true;
+}
+#endif
+
 std::make_signed_t<std::size_t>
     Socket::read (void *const buffer_, std::size_t const size_, bool const oob_)
 {
@@ -310,6 +323,21 @@ std::make_signed_t<std::size_t> Socket::read (IOBuffer &buffer_, bool const oob_
 	auto const rc = read (buffer_.freeArea (), buffer_.freeSize (), oob_);
 	if (rc > 0)
 		buffer_.markUsed (rc);
+
+	return rc;
+}
+
+std::make_signed_t<std::size_t>
+    Socket::readFrom (void *const buffer_, std::size_t const size_, SockAddr &addr_)
+{
+	assert (buffer_);
+	assert (size_);
+
+	socklen_t addrLen = sizeof (sockaddr_storage);
+
+	auto const rc = ::recvfrom (m_fd, buffer_, size_, 0, addr_, &addrLen);
+	if (rc < 0 && errno != EWOULDBLOCK)
+		error ("recvfrom: %s\n", std::strerror (errno));
 
 	return rc;
 }
@@ -337,6 +365,19 @@ std::make_signed_t<std::size_t> Socket::write (IOBuffer &buffer_)
 	return rc;
 }
 
+std::make_signed_t<std::size_t>
+    Socket::writeTo (void const *buffer_, std::size_t size_, SockAddr const &addr_)
+{
+	assert (buffer_);
+	assert (size_ > 0);
+
+	auto const rc = ::sendto (m_fd, buffer_, size_, 0, addr_, addr_.size ());
+	if (rc < 0 && errno != EWOULDBLOCK)
+		error ("sendto: %s\n", std::strerror (errno));
+
+	return rc;
+}
+
 SockAddr const &Socket::sockName () const
 {
 	return m_sockName;
@@ -347,9 +388,9 @@ SockAddr const &Socket::peerName () const
 	return m_peerName;
 }
 
-UniqueSocket Socket::create ()
+UniqueSocket Socket::create (Type const type_)
 {
-	auto const fd = ::socket (AF_INET, SOCK_STREAM, 0);
+	auto const fd = ::socket (AF_INET, static_cast<int> (type_), 0);
 	if (fd < 0)
 	{
 		error ("socket: %s\n", std::strerror (errno));
@@ -366,7 +407,7 @@ int Socket::poll (PollInfo *const info_,
 	if (count_ == 0)
 		return 0;
 
-	auto const pfd = std::make_unique<struct pollfd[]> (count_);
+	auto const pfd = std::make_unique<pollfd[]> (count_);
 	for (std::size_t i = 0; i < count_; ++i)
 	{
 		pfd[i].fd      = info_[i].socket.get ().m_fd;
@@ -387,8 +428,8 @@ int Socket::poll (PollInfo *const info_,
 	return rc;
 }
 
-#ifdef NDS
-extern "C" int poll (struct pollfd *const fds_, nfds_t const nfds_, int const timeout_)
+#ifdef __NDS__
+extern "C" int poll (pollfd *const fds_, nfds_t const nfds_, int const timeout_)
 {
 	fd_set readFds;
 	fd_set writeFds;
@@ -406,7 +447,7 @@ extern "C" int poll (struct pollfd *const fds_, nfds_t const nfds_, int const ti
 			FD_SET (fds_[i].fd, &writeFds);
 	}
 
-	struct timeval tv;
+	timeval tv;
 	tv.tv_sec     = timeout_ / 1000;
 	tv.tv_usec    = (timeout_ % 1000) * 1000;
 	auto const rc = ::select (nfds_, &readFds, &writeFds, &exceptFds, &tv);

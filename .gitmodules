@@ -1,0 +1,3 @@
+[submodule "3rd/gls"]
+	path = 3rd/gls
+	url = git@github.com:microsoft/GSL.git

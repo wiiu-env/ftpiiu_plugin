@@ -3,7 +3,7 @@
 // - RFC 3659 (https://tools.ietf.org/html/rfc3659)
 // - suggested implementation details from https://cr.yp.to/ftp/filesystem.html
 //
-// Copyright (C) 2023 Michael Theall
+// Copyright (C) 2024 Michael Theall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -26,8 +26,20 @@
 #include "platform.h"
 #include "socket.h"
 
+#if __has_include(<glob.h>)
+#include <glob.h>
+#define FTPD_HAS_GLOB 1
+#else
+#define FTPD_HAS_GLOB 0
+#endif
+
+#include <sys/stat.h>
+using stat_t = struct stat;
+
 #include <chrono>
+#include <ctime>
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -47,6 +59,9 @@ public:
 	/// \brief Draw session status
 	void draw ();
 
+	/// \brief Draw session connections
+	void drawConnections ();
+
 	/// \brief Create session
 	/// \param config_ FTP config
 	/// \param commandSocket_ Command socket
@@ -60,7 +75,7 @@ private:
 	/// \brief Command buffer size
 	constexpr static auto COMMAND_BUFFERSIZE = 4096;
 
-#ifdef NDS
+#ifdef __NDS__
 	/// \brief Response buffer size
 	constexpr static auto RESPONSE_BUFFERSIZE = 4096;
 
@@ -77,7 +92,7 @@ private:
 	/// \brief File buffersize
 	constexpr static auto FILE_BUFFERSIZE = 4 * XFER_BUFFERSIZE;
 
-#if defined(NDS)
+#if defined(__NDS__)
 	/// \brief Socket buffer size
 	constexpr static auto SOCK_BUFFERSIZE = 4096;
 
@@ -156,11 +171,21 @@ private:
 	/// \brief Connect data socket
 	bool dataConnect ();
 
+	/// \brief Perform stat and apply tz offset to mtime
+	/// \param path_ Path to stat
+	/// \param st_ Output stat
+	int tzStat (char const *const path_, stat_t *st_);
+
+	/// \brief Perform lstat and apply tz offset to mtime
+	/// \param path_ Path to lstat
+	/// \param st_ Output stat
+	int tzLStat (char const *const path_, stat_t *st_);
+
 	/// \brief Fill directory entry
 	/// \param st_ Entry status
 	/// \param path_ Path name
 	/// \param type_ MLST type
-	int fillDirent (struct stat const &st_, std::string_view path_, char const *type_ = nullptr);
+	int fillDirent (stat_t const &st_, std::string_view path_, char const *type_ = nullptr);
 
 	/// \brief Fill directory entry
 	/// \param path_ Path name
@@ -199,13 +224,18 @@ private:
 	/// \brief Transfer directory list
 	bool listTransfer ();
 
+#if FTPD_HAS_GLOB
+	/// \brief Transfer glob list
+	bool globTransfer ();
+#endif
+
 	/// \brief Transfer download
 	bool retrieveTransfer ();
 
 	/// \brief Transfer upload
 	bool storeTransfer ();
 
-#ifndef NDS
+#ifndef __NDS__
 	/// \brief Mutex
 	platform::Mutex m_lock;
 #endif
@@ -285,10 +315,41 @@ private:
 	/// \brief Directory being transferred
 	fs::Dir m_dir;
 
+#if FTPD_HAS_GLOB
+	/// \brief Glob wrappre
+	class Glob
+	{
+	public:
+		~Glob () noexcept;
+		Glob () noexcept;
+
+		/// \brief Perform glob
+		/// \param pattern_ Glob pattern
+		bool glob (char const *pattern_) noexcept;
+
+		/// \brief Get next glob result
+		/// \note returns nullptr when no more entries exist
+		char const *next () noexcept;
+
+	private:
+		/// \brief Clear glob
+		void clear () noexcept;
+
+		/// \brief Glob result
+		std::optional<glob_t> m_glob = std::nullopt;
+
+		/// \brief Result counter
+		unsigned m_offset = 0;
+	};
+
+	/// \brief Glob
+	Glob m_glob;
+#endif
+
 	/// \brief Directory transfer mode
 	XferDirMode m_xferDirMode;
 
-	/// \brief Last command timestamp
+	/// \brief Last activity timestamp
 	time_t m_timestamp;
 
 	/// \brief Whether user has been authorized
