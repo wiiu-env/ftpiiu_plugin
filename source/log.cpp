@@ -3,7 +3,7 @@
 // - RFC 3659 (https://tools.ietf.org/html/rfc3659)
 // - suggested implementation details from https://cr.yp.to/ftp/filesystem.html
 //
-// Copyright (C) 2022 Michael Theall
+// Copyright (C) 2024 Michael Theall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 
 #include "platform.h"
 
-#ifndef __WIIU__
+#if !defined(__WIIU__) && !defined(CLASSIC)
 #include "imgui.h"
 #endif
 
@@ -77,7 +77,7 @@ struct Message
 /// \brief Log messages
 std::vector<Message> s_messages;
 
-#ifndef NDS
+#ifndef __NDS__
 /// \brief Log lock
 platform::Mutex s_lock;
 #endif
@@ -85,7 +85,7 @@ platform::Mutex s_lock;
 
 void drawLog ()
 {
-#ifndef NDS
+#ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);
 #endif
 
@@ -166,7 +166,7 @@ void drawLog ()
 #ifndef CLASSIC
 std::string getLog ()
 {
-#ifndef NDS
+#ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);
 #endif
 
@@ -204,6 +204,8 @@ void debug (char const *const fmt_, ...)
 	va_start (ap, fmt_);
 	addLog (DEBUGLOG, fmt_, ap);
 	va_end (ap);
+#else
+	(void)fmt_;
 #endif
 }
 
@@ -253,7 +255,8 @@ void addLog (LogLevel const level_, char const *const fmt_, va_list ap_)
 	if (level_ == DEBUGLOG)
 		return;
 #endif
-#ifndef NDS
+
+#ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);
 #endif
 
@@ -296,7 +299,7 @@ void addLog (LogLevel const level_, std::string_view const message_)
 			c = '?';
 	}
 
-#ifndef NDS
+#ifndef __NDS__
 	auto const lock = std::scoped_lock (s_lock);
 #endif
 #ifndef NDEBUG

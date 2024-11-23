@@ -459,6 +459,12 @@ void platform::Thread::sleep (std::chrono::milliseconds const timeout_)
 	std::this_thread::sleep_for (timeout_);
 }
 
+std::string const &platform::hostname ()
+{
+	static std::string const hostname = "wiiu-ftpd";
+	return hostname;
+}
+
 ///////////////////////////////////////////////////////////////////////////
 #define USE_STD_MUTEX 1
 
