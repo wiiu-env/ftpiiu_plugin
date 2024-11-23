@@ -15,6 +15,8 @@ jobs:
     needs: clang-format
     steps:
     - uses: actions/checkout@v4
+      with:
+        submodules: true
     - name: create version.h
       run: |
         git_hash=$(git rev-parse --short "${{ github.event.pull_request.head.sha }}")

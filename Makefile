@@ -22,9 +22,9 @@ WUPS_ROOT := $(DEVKITPRO)/wups
 #-------------------------------------------------------------------------------
 TARGET		:=	ftpiiu
 BUILD		:=	build
-SOURCES		:=	source source/wiiu
+SOURCES		:=	source source/wiiu  source/posix
 DATA		:=	data
-INCLUDES	:=	source include
+INCLUDES	:=	source include 3rd/gls/include
 
 #-------------------------------------------------------------------------------
 # options for code generation

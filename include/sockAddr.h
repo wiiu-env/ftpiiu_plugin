@@ -3,7 +3,7 @@
 // - RFC 3659 (https://tools.ietf.org/html/rfc3659)
 // - suggested implementation details from https://cr.yp.to/ftp/filesystem.html
 //
-// Copyright (C) 2020 Michael Theall
+// Copyright (C) 2024 Michael Theall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -23,23 +23,54 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 
+#include <compare>
 #include <cstdint>
-
-#ifdef NDS
-struct sockaddr_storage
-{
-	unsigned short ss_family;
-	char ss_data[sizeof (struct sockaddr_in) - sizeof (unsigned short)];
-};
-#endif
 
 /// \brief Socket address
 class SockAddr
 {
 public:
+	enum class Domain
+	{
+		IPv4 = AF_INET,
+#ifndef NO_IPV6
+		IPv6 = AF_INET6,
+#endif
+	};
+
+	/// \brief 0.0.0.0
+	static SockAddr const AnyIPv4;
+
+#ifndef NO_IPV6
+	/// \brief ::
+	static SockAddr const AnyIPv6;
+#endif
+
 	~SockAddr ();
 
 	SockAddr ();
+
+	/// \brief Parameterized constructor
+	/// \param domain_ Socket domain
+	/// \note Initial address is INADDR_ANY/in6addr_any
+	SockAddr (Domain domain_);
+
+	/// \brief Parameterized constructor
+	/// \param addr_ Socket address (network byte order)
+	/// \param port_ Socket port (host byte order)
+	SockAddr (in_addr_t addr_, std::uint16_t port_ = 0);
+
+	/// \brief Parameterized constructor
+	/// \param addr_ Socket address (network byte order)
+	/// \param port_ Socket port (host byte order)
+	SockAddr (in_addr const &addr_, std::uint16_t port_ = 0);
+
+#ifndef NO_IPV6
+	/// \brief Parameterized constructor
+	/// \param addr_ Socket address
+	/// \param port_ Socket port (host byte order)
+	SockAddr (in6_addr const &addr_, std::uint16_t port_ = 0);
+#endif
 
 	/// \brief Copy constructor
 	/// \param that_ Object to copy
@@ -57,46 +88,69 @@ public:
 	/// \param that_ Object to move from
 	SockAddr &operator= (SockAddr &&that_);
 
-	/// \param Parameterized constructor
-	/// \param addr_ Address
-	SockAddr (struct sockaddr const &addr_);
+	/// \brief Parameterized constructor
+	/// \param addr_ Address (network byte order)
+	SockAddr (sockaddr_in const &addr_);
 
-	/// \param Parameterized constructor
-	/// \param addr_ Address
-	SockAddr (struct sockaddr_in const &addr_);
-
-#ifndef __3DS__
-	/// \param Parameterized constructor
-	/// \param addr_ Address
-	SockAddr (struct sockaddr_in6 const &addr_);
+#ifndef NO_IPV6
+	/// \brief Parameterized constructor
+	/// \param addr_ Address (network byte order)
+	SockAddr (sockaddr_in6 const &addr_);
 #endif
 
-	/// \param Parameterized constructor
-	/// \param addr_ Address
-	SockAddr (struct sockaddr_storage const &addr_);
+	/// \brief Parameterized constructor
+	/// \param addr_ Address (network byte order)
+	SockAddr (sockaddr_storage const &addr_);
 
-	/// \param sockaddr_in cast operator
-	operator struct sockaddr_in const & () const;
+	/// \brief sockaddr_in cast operator (network byte order)
+	operator sockaddr_in const & () const;
 
-#ifndef __3DS__
-	/// \param sockaddr_in6 cast operator
-	operator struct sockaddr_in6 const & () const;
+#ifndef NO_IPV6
+	/// \brief sockaddr_in6 cast operator (network byte order)
+	operator sockaddr_in6 const & () const;
 #endif
 
-	/// \param sockaddr_storage cast operator
-	operator struct sockaddr_storage const & () const;
+	/// \brief sockaddr_storage cast operator (network byte order)
+	operator sockaddr_storage const & () const;
 
-	/// \param sockaddr* cast operator
-	operator struct sockaddr * ();
-	/// \param sockaddr const* cast operator
-	operator struct sockaddr const * () const;
+	/// \brief sockaddr* cast operator (network byte order)
+	operator sockaddr * ();
 
-	/// \brief Address port
+	/// \brief sockaddr const* cast operator (network byte order)
+	operator sockaddr const * () const;
+
+	/// \brief Equality operator
+	bool operator== (SockAddr const &that_) const;
+
+	/// \brief Comparison operator
+	std::strong_ordering operator<=> (SockAddr const &that_) const;
+
+	/// \brief sockaddr domain
+	Domain domain () const;
+
+	/// \brief sockaddr size
+	socklen_t size () const;
+
+	/// \brief Set address
+	/// \param addr_ Address to set (network byte order)
+	void setAddr (in_addr_t addr_);
+
+	/// \brief Set address
+	/// \param addr_ Address to set (network byte order)
+	void setAddr (in_addr const &addr_);
+
+#ifndef NO_IPV6
+	/// \brief Set address
+	/// \param addr_ Address to set (network byte order)
+	void setAddr (in6_addr const &addr_);
+#endif
+
+	/// \brief Address port (host byte order)
 	std::uint16_t port () const;
 
 	/// \brief Set address port
-	/// \param port_ Port to set
-	bool setPort (std::uint16_t port_);
+	/// \param port_ Port to set (host byte order)
+	void setPort (std::uint16_t port_);
 
 	/// \brief Address name
 	/// \param buffer_ Buffer to hold name
@@ -111,6 +165,6 @@ public:
 	char const *name () const;
 
 private:
-	/// \brief Address storage
-	struct sockaddr_storage m_addr = {};
+	/// \brief Address storage (network byte order)
+	sockaddr_storage m_addr = {};
 };

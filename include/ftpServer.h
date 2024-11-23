@@ -3,7 +3,7 @@
 // - RFC 3659 (https://tools.ietf.org/html/rfc3659)
 // - suggested implementation details from https://cr.yp.to/ftp/filesystem.html
 //
-// Copyright (C) 2022 Michael Theall
+// Copyright (C) 2024 Michael Theall
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -48,6 +48,9 @@ public:
 	/// \brief Draw server and all of its sessions
 	void draw ();
 
+	/// \brief Whether server wants to quit
+	bool quit ();
+
 	/// \brief Create server
 	static UniqueFtpServer create ();
 
@@ -59,6 +62,11 @@ public:
 
 	/// \brief Server start time
 	static std::time_t startTime ();
+
+#ifdef __3DS__
+	/// \brief Get timezone offset in seconds (only used on 3DS)
+	static int tzOffset ();
+#endif
 
 private:
 	/// \brief Paramterized constructor
@@ -88,7 +96,7 @@ private:
 	/// \brief Thread entry point
 	void threadFunc ();
 
-#ifndef NDS
+#ifndef __NDS__
 	/// \brief Thread
 	platform::Thread m_thread;
 
@@ -102,6 +110,11 @@ private:
 	/// \brief Listen socket
 	UniqueSocket m_socket;
 
+#ifndef __NDS__
+	/// \brief mDNS socket
+	UniqueSocket m_mdnsSocket;
+#endif
+
 	/// \brief ImGui window name
 	std::string m_name;
 
@@ -109,7 +122,7 @@ private:
 	std::vector<UniqueFtpSession> m_sessions;
 
 	/// \brief Whether thread should quit
-	std::atomic<bool> m_quit;
+	std::atomic_bool m_quit = false;
 
 #ifndef CLASSIC
 	/// \brief Log upload cURL context
@@ -143,8 +156,11 @@ private:
 	/// \brief Password setting
 	std::string m_passSetting;
 
+	/// \brief Hostname setting
+	std::string m_hostnameSetting;
+
 	/// \brief Port setting
-	std::uint16_t m_portSetting;
+	std::uint16_t m_portSetting = 0;
 
 #ifdef __3DS__
 	/// \brief getMTime setting
@@ -153,7 +169,7 @@ private:
 
 #ifdef __SWITCH__
 	/// \brief Whether an error occurred enabling access point
-	std::atomic<bool> m_apError = false;
+	std::atomic_bool m_apError = false;
 
 	/// \brief Enable access point setting
 	bool m_enableAPSetting;
