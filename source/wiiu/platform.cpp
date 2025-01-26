@@ -42,7 +42,7 @@
 #ifndef CLASSIC
 #error "Wii U must be built in classic mode"
 #endif
-#define VERSION "v0.4.3"
+#define VERSION "v0.4.4"
 #define VERSION_FULL VERSION VERSION_EXTRA
 
 WUPS_PLUGIN_NAME ("ftpiiu");
