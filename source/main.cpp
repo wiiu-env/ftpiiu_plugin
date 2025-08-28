@@ -23,7 +23,6 @@
 #include "platform.h"
 
 #include "ftpServer.h"
-#include "log.h"
 #ifndef __WIIU__
 #include "imgui.h"
 #endif
@@ -67,8 +66,6 @@ int main ()
 #ifndef NO_CONSOLE
 		server->draw ();
 		platform::render ();
-#else
-		drawLog ();
 #endif
 	}
 
