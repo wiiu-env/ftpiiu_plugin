@@ -55,8 +55,7 @@ struct __collate_st_chain_pri __collate_chain_pri_table[TABLE_SIZE];
 
 void __collate_err (int ex, const char *f);
 
-int __collate_load_tables (encoding)
-char *encoding;
+int __collate_load_tables (char *encoding)
 {
 	char buf[PATH_MAX];
 	FILE *fp;
@@ -111,7 +110,7 @@ char *encoding;
 	return 0;
 }
 
-u_char *__collate_substitute (s) const u_char *s;
+u_char *__collate_substitute (const u_char *s)
 {
 	int dest_len, len, nlen;
 	int delta        = strlen ((const char *)s);
@@ -139,8 +138,7 @@ u_char *__collate_substitute (s) const u_char *s;
 	return dest_str;
 }
 
-void __collate_lookup (t, len, prim, sec) const u_char *t;
-int *len, *prim, *sec;
+void __collate_lookup (const u_char *t, int *len, int *prim, int *sec)
 {
 	struct __collate_st_chain_pri *p2;
 
@@ -160,8 +158,7 @@ int *len, *prim, *sec;
 	*sec  = __collate_char_pri_table[*t].sec;
 }
 
-u_char *__collate_strdup (s)
-u_char *s;
+u_char *__collate_strdup (u_char *s)
 {
 	u_char *t = (u_char *)strdup ((const char *)s);
 
