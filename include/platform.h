@@ -30,9 +30,6 @@
 #include <3ds.h>
 #elif defined(__SWITCH__)
 #include <switch.h>
-#elif defined(__WIIU__)
-#include <coreinit/debug.h>
-#include <wut.h>
 #endif
 
 #include <chrono>

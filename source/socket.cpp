@@ -21,10 +21,9 @@
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "socket.h"
-#include "log.h"
-#include "platform.h"
 
-#include <chrono>
+#include "log.h"
+
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
@@ -34,8 +33,6 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
-
-using namespace std::chrono_literals;
 
 ///////////////////////////////////////////////////////////////////////////
 Socket::~Socket ()
