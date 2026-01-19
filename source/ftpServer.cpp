@@ -484,7 +484,7 @@ void FtpServer::handleNetworkFound ()
 
 	LOCKED (m_socket = std::move (socket));
 
-#ifndef __NDS__
+#if !defined(NDS) && !defined(__WIIU__)
 	socket = mdns::createSocket ();
 	if (!socket)
 		return;
@@ -507,7 +507,7 @@ void FtpServer::handleNetworkLost ()
 		// destroy command socket
 		LOCKED (sock = std::move (m_socket));
 
-#ifndef __NDS__
+#if !defined(NDS) && !defined(__WIIU__)
 		// destroy mDNS socket
 		LOCKED (sock = std::move (m_mdnsSocket));
 #endif
@@ -1043,7 +1043,7 @@ void FtpServer::loop ()
 		}
 	}
 
-#ifndef __NDS__
+#if !defined(NDS) && !defined(__WIIU__)
 	// poll mDNS socket
 	if (m_socket && m_mdnsSocket)
 		mdns::handleSocket (m_mdnsSocket.get (), m_socket->sockName ());
