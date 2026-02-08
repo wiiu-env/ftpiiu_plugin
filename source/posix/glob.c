@@ -31,7 +31,7 @@
  */
 
 #ifdef __CYGWIN__
-#define _NO_GLOB /* Cygwin provides its own glob. */
+#define _NO_GLOB	/* Cygwin provides its own glob. */
 #endif
 
 #ifndef _NO_GLOB
@@ -67,129 +67,127 @@ static char sccsid[] = "@(#)glob.c	8.3 (Berkeley) 10/13/93";
  */
 
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <glob.h>
-#include <limits.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <limits.h>
 
 #include "collate.h"
 
-#define DOLLAR '$'
-#define DOT '.'
-#define EOS '\0'
-#define LBRACKET '['
-#define NOT '!'
-#define QUESTION '?'
-#define QUOTE '\\'
-#define RANGE '-'
-#define RBRACKET ']'
-#define SEP '/'
-#define STAR '*'
-#define TILDE '~'
-#define UNDERSCORE '_'
-#define LBRACE '{'
-#define RBRACE '}'
-#define SLASH '/'
-#define COMMA ','
+#define	DOLLAR		'$'
+#define	DOT		'.'
+#define	EOS		'\0'
+#define	LBRACKET	'['
+#define	NOT		'!'
+#define	QUESTION	'?'
+#define	QUOTE		'\\'
+#define	RANGE		'-'
+#define	RBRACKET	']'
+#define	SEP		'/'
+#define	STAR		'*'
+#define	TILDE		'~'
+#define	UNDERSCORE	'_'
+#define	LBRACE		'{'
+#define	RBRACE		'}'
+#define	SLASH		'/'
+#define	COMMA		','
 
 #ifndef DEBUG
 
-#define M_QUOTE 0x8000
-#define M_PROTECT 0x4000
-#define M_MASK 0xffff
-#define M_ASCII 0x00ff
+#define	M_QUOTE		0x8000
+#define	M_PROTECT	0x4000
+#define	M_MASK		0xffff
+#define	M_ASCII		0x00ff
 
 typedef u_short Char;
 
 #else
 
-#define M_QUOTE 0x80
-#define M_PROTECT 0x40
-#define M_MASK 0xff
-#define M_ASCII 0x7f
+#define	M_QUOTE		0x80
+#define	M_PROTECT	0x40
+#define	M_MASK		0xff
+#define	M_ASCII		0x7f
 
 typedef char Char;
 
 #endif
 
-#define CHAR(c) ((Char)((c)&M_ASCII))
-#define META(c) ((Char)((c) | M_QUOTE))
-#define M_ALL META ('*')
-#define M_END META (']')
-#define M_NOT META ('!')
-#define M_ONE META ('?')
-#define M_RNG META ('-')
-#define M_SET META ('[')
-#define ismeta(c) (((c)&M_QUOTE) != 0)
 
-static int compare (const void *, const void *);
-static int g_Ctoc (const Char *, char *, u_int);
-static int g_lstat (Char *, struct stat *, glob_t *);
-static DIR *g_opendir (Char *, glob_t *);
-static Char *g_strchr (Char *, int);
+#define	CHAR(c)		((Char)((c)&M_ASCII))
+#define	META(c)		((Char)((c)|M_QUOTE))
+#define	M_ALL		META('*')
+#define	M_END		META(']')
+#define	M_NOT		META('!')
+#define	M_ONE		META('?')
+#define	M_RNG		META('-')
+#define	M_SET		META('[')
+#define	ismeta(c)	(((c)&M_QUOTE) != 0)
+
+
+static int	 compare(const void *, const void *);
+static int	 g_Ctoc(const Char *, char *, u_int);
+static int	 g_lstat(Char *, struct stat *, glob_t *);
+static DIR	*g_opendir(Char *, glob_t *);
+static Char	*g_strchr(Char *, int);
 #ifdef notdef
-static Char *g_strcat (Char *, const Char *);
+static Char	*g_strcat(Char *, const Char *);
 #endif
-static int g_stat (Char *, struct stat *, glob_t *);
-static int glob0 (const Char *, glob_t *, int *);
-static int glob1 (Char *, glob_t *, int *);
-static int glob2 (Char *, Char *, Char *, Char *, glob_t *, int *);
-static int glob3 (Char *, Char *, Char *, Char *, Char *, glob_t *, int *);
-static int globextend (const Char *, glob_t *, int *);
-static int globexp1 (const Char *, glob_t *, int *);
-static int globexp2 (const Char *, const Char *, glob_t *, int *, int *);
-static int match (Char *, Char *, Char *);
+static int	 g_stat(Char *, struct stat *, glob_t *);
+static int	 glob0(const Char *, glob_t *, int *);
+static int	 glob1(Char *, glob_t *, int *);
+static int	 glob2(Char *, Char *, Char *, Char *, glob_t *, int *);
+static int	 glob3(Char *, Char *, Char *, Char *, Char *, glob_t *, int *);
+static int	 globextend(const Char *, glob_t *, int *);
+static int	 globexp1(const Char *, glob_t *, int *);
+static int	 globexp2(const Char *, const Char *, glob_t *, int *, int *);
+static int	 match(Char *, Char *, Char *);
 #ifdef DEBUG
-static void qprintf (const char *, Char *);
+static void	 qprintf(const char *, Char *);
 #endif
 
-int glob (pattern, flags, errfunc, pglob) const char *__restrict pattern;
-int flags, (*errfunc) (const char *, int);
-glob_t *__restrict pglob;
+int
+glob(
+	const char *__restrict pattern,
+	int flags, int (*errfunc)(const char *, int),
+	glob_t *__restrict pglob )
 {
 	const u_char *patnext;
 	int c, limit;
 	Char *bufnext, *bufend, patbuf[MAXPATHLEN];
 
-	patnext = (u_char *)pattern;
-	if (!(flags & GLOB_APPEND))
-	{
+	patnext = (u_char *) pattern;
+	if (!(flags & GLOB_APPEND)) {
 		pglob->gl_pathc = 0;
 		pglob->gl_pathv = NULL;
 		if (!(flags & GLOB_DOOFFS))
 			pglob->gl_offs = 0;
 	}
-	if (flags & GLOB_LIMIT)
-	{
+	if (flags & GLOB_LIMIT) {
 		limit = pglob->gl_matchc;
 		if (limit == 0)
 			limit = ARG_MAX;
-	}
-	else
+	} else
 		limit = 0;
-	pglob->gl_flags   = flags & ~GLOB_MAGCHAR;
+	pglob->gl_flags = flags & ~GLOB_MAGCHAR;
 	pglob->gl_errfunc = errfunc;
-	pglob->gl_matchc  = 0;
+	pglob->gl_matchc = 0;
 
 	bufnext = patbuf;
-	bufend  = bufnext + MAXPATHLEN - 1;
-	if (flags & GLOB_QUOTE)
-	{
+	bufend = bufnext + MAXPATHLEN - 1;
+	if (flags & GLOB_QUOTE) {
 		/* Protect the quoted characters. */
 		while (bufnext < bufend && (c = *patnext++) != EOS)
-			if (c == QUOTE)
-			{
-				if ((c = *patnext++) == EOS)
-				{
+			if (c == QUOTE) {
+				if ((c = *patnext++) == EOS) {
 					c = QUOTE;
 					--patnext;
 				}
@@ -199,14 +197,14 @@ glob_t *__restrict pglob;
 				*bufnext++ = c;
 	}
 	else
-		while (bufnext < bufend && (c = *patnext++) != EOS)
-			*bufnext++ = c;
+	    while (bufnext < bufend && (c = *patnext++) != EOS)
+		    *bufnext++ = c;
 	*bufnext = EOS;
 
 	if (flags & GLOB_BRACE)
-		return globexp1 (patbuf, pglob, &limit);
+	    return globexp1(patbuf, pglob, &limit);
 	else
-		return glob0 (patbuf, pglob, &limit);
+	    return glob0(patbuf, pglob, &limit);
 }
 
 /*
@@ -214,53 +212,50 @@ glob_t *__restrict pglob;
  * invoke the standard globbing routine to glob the rest of the magic
  * characters
  */
-static int globexp1 (pattern, pglob, limit) const Char *pattern;
-glob_t *pglob;
-int *limit;
+static int
+globexp1( const Char *pattern, glob_t *pglob, int *limit)
 {
-	const Char *ptr = pattern;
+	const Char* ptr = pattern;
 	int rv;
 
 	/* Protect a single {}, for find(1), like csh */
 	if (pattern[0] == LBRACE && pattern[1] == RBRACE && pattern[2] == EOS)
-		return glob0 (pattern, pglob, limit);
+		return glob0(pattern, pglob, limit);
 
-	while ((ptr = (const Char *)g_strchr ((Char *)ptr, LBRACE)) != NULL)
-		if (!globexp2 (ptr, pattern, pglob, &rv, limit))
+	while ((ptr = (const Char *) g_strchr((Char *) ptr, LBRACE)) != NULL)
+		if (!globexp2(ptr, pattern, pglob, &rv, limit))
 			return rv;
 
-	return glob0 (pattern, pglob, limit);
+	return glob0(pattern, pglob, limit);
 }
+
 
 /*
  * Recursive brace globbing helper. Tries to expand a single brace.
  * If it succeeds then it invokes globexp1 with the new pattern.
  * If it fails then it tries to glob the rest of the pattern and returns.
  */
-static int globexp2 (ptr, pattern, pglob, rv, limit) const Char *ptr, *pattern;
-glob_t *pglob;
-int *rv, *limit;
+static int
+globexp2( const Char *ptr, const Char *pattern, glob_t *pglob, int *rv, int *limit)
 {
-	int i;
-	Char *lm, *ls;
+	int     i;
+	Char   *lm, *ls;
 	const Char *pe, *pm, *pl;
-	Char patbuf[MAXPATHLEN];
+	Char    patbuf[MAXPATHLEN];
 
 	/* copy part up to the brace */
 	for (lm = patbuf, pm = pattern; pm != ptr; *lm++ = *pm++)
 		continue;
 	*lm = EOS;
-	ls  = lm;
+	ls = lm;
 
 	/* Find the balanced brace */
 	for (i = 0, pe = ++ptr; *pe; pe++)
-		if (*pe == LBRACKET)
-		{
+		if (*pe == LBRACKET) {
 			/* Ignore everything between [] */
 			for (pm = pe++; *pe != RBRACKET && *pe != EOS; pe++)
 				continue;
-			if (*pe == EOS)
-			{
+			if (*pe == EOS) {
 				/*
 				 * We could not find a matching RBRACKET.
 				 * Ignore and just look for RBRACE
@@ -270,29 +265,25 @@ int *rv, *limit;
 		}
 		else if (*pe == LBRACE)
 			i++;
-		else if (*pe == RBRACE)
-		{
+		else if (*pe == RBRACE) {
 			if (i == 0)
 				break;
 			i--;
 		}
 
 	/* Non matching braces; just glob the pattern */
-	if (i != 0 || *pe == EOS)
-	{
-		*rv = glob0 (patbuf, pglob, limit);
+	if (i != 0 || *pe == EOS) {
+		*rv = glob0(patbuf, pglob, limit);
 		return 0;
 	}
 
 	for (i = 0, pl = pm = ptr; pm <= pe; pm++)
-		switch (*pm)
-		{
+		switch (*pm) {
 		case LBRACKET:
 			/* Ignore everything between [] */
 			for (pl = pm++; *pm != RBRACKET && *pm != EOS; pm++)
 				continue;
-			if (*pm == EOS)
-			{
+			if (*pm == EOS) {
 				/*
 				 * We could not find a matching RBRACKET.
 				 * Ignore and just look for RBRACE
@@ -306,17 +297,15 @@ int *rv, *limit;
 			break;
 
 		case RBRACE:
-			if (i)
-			{
-				i--;
-				break;
+			if (i) {
+			    i--;
+			    break;
 			}
 			/* FALLTHROUGH */
 		case COMMA:
 			if (i && *pm == COMMA)
 				break;
-			else
-			{
+			else {
 				/* Append the current string */
 				for (lm = ls; (pl < pm); *lm++ = *pl++)
 					continue;
@@ -327,11 +316,11 @@ int *rv, *limit;
 				for (pl = pe + 1; (*lm++ = *pl++) != EOS;)
 					continue;
 
-					/* Expand the current pattern */
+				/* Expand the current pattern */
 #ifdef DEBUG
-				qprintf ("globexp2:", patbuf);
+				qprintf("globexp2:", patbuf);
 #endif
-				*rv = globexp1 (patbuf, pglob, limit);
+				*rv = globexp1(patbuf, pglob, limit);
 
 				/* move after the comma, to the next string */
 				pl = pm + 1;
@@ -345,6 +334,9 @@ int *rv, *limit;
 	return 0;
 }
 
+
+
+
 /*
  * The main glob() routine: compiles the pattern (optionally processing
  * quotes), calls glob1() to do the real pattern matching, and finally
@@ -352,9 +344,8 @@ int *rv, *limit;
  * if things went well, nonzero if errors occurred.  It is not an error
  * to find no matches.
  */
-static int glob0 (pattern, pglob, limit) const Char *pattern;
-glob_t *pglob;
-int *limit;
+static int
+glob0(const Char *pattern, glob_t *pglob, int *limit)
 {
 	const Char *qpatnext;
 	int c, err, oldpathc;
@@ -362,19 +353,17 @@ int *limit;
 
 	qpatnext = pattern;
 	oldpathc = pglob->gl_pathc;
-	bufnext  = patbuf;
+	bufnext = patbuf;
 
 	/* We don't need to check for buffer overflow any more. */
-	while ((c = *qpatnext++) != EOS)
-	{
-		switch (c)
-		{
+	while ((c = *qpatnext++) != EOS) {
+		switch (c) {
 		case LBRACKET:
 			c = *qpatnext;
 			if (c == NOT)
 				++qpatnext;
-			if (*qpatnext == EOS || g_strchr ((Char *)qpatnext + 1, RBRACKET) == NULL)
-			{
+			if (*qpatnext == EOS ||
+			    g_strchr((Char *) qpatnext+1, RBRACKET) == NULL) {
 				*bufnext++ = LBRACKET;
 				if (c == NOT)
 					--qpatnext;
@@ -384,13 +373,12 @@ int *limit;
 			if (c == NOT)
 				*bufnext++ = M_NOT;
 			c = *qpatnext++;
-			do
-			{
-				*bufnext++ = CHAR (c);
-				if (*qpatnext == RANGE && (c = qpatnext[1]) != RBRACKET)
-				{
+			do {
+				*bufnext++ = CHAR(c);
+				if (*qpatnext == RANGE &&
+				    (c = qpatnext[1]) != RBRACKET) {
 					*bufnext++ = M_RNG;
-					*bufnext++ = CHAR (c);
+					*bufnext++ = CHAR(c);
 					qpatnext += 2;
 				}
 			} while ((c = *qpatnext++) != RBRACKET);
@@ -407,20 +395,20 @@ int *limit;
 			 * to avoid exponential behavior
 			 */
 			if (bufnext == patbuf || bufnext[-1] != M_ALL)
-				*bufnext++ = M_ALL;
+			    *bufnext++ = M_ALL;
 			break;
 		default:
-			*bufnext++ = CHAR (c);
+			*bufnext++ = CHAR(c);
 			break;
 		}
 	}
 	*bufnext = EOS;
 #ifdef DEBUG
-	qprintf ("glob0:", patbuf);
+	qprintf("glob0:", patbuf);
 #endif
 
-	if ((err = glob1 (patbuf, pglob, limit)) != 0)
-		return (err);
+	if ((err = glob1(patbuf, pglob, limit)) != 0)
+		return(err);
 
 	/*
 	 * If there was no match we are going to append the pattern
@@ -430,32 +418,31 @@ int *limit;
 	 */
 	if (pglob->gl_pathc == oldpathc &&
 	    ((pglob->gl_flags & GLOB_NOCHECK) ||
-	        ((pglob->gl_flags & GLOB_NOMAGIC) && !(pglob->gl_flags & GLOB_MAGCHAR))))
-		return (globextend (pattern, pglob, limit));
+	      ((pglob->gl_flags & GLOB_NOMAGIC) &&
+	       !(pglob->gl_flags & GLOB_MAGCHAR))))
+		return(globextend(pattern, pglob, limit));
 	else if (!(pglob->gl_flags & GLOB_NOSORT))
-		qsort (pglob->gl_pathv + pglob->gl_offs + oldpathc,
-		    pglob->gl_pathc - oldpathc,
-		    sizeof (char *),
-		    compare);
-	return (0);
+		qsort(pglob->gl_pathv + pglob->gl_offs + oldpathc,
+		    pglob->gl_pathc - oldpathc, sizeof(char *), compare);
+	return(0);
 }
 
-static int compare (p, q) const void *p, *q;
+static int
+compare(const void *p, const void *q)
 {
-	return (strcmp (*(char **)p, *(char **)q));
+	return(strcmp(*(char **)p, *(char **)q));
 }
 
-static int glob1 (pattern, pglob, limit)
-Char *pattern;
-glob_t *pglob;
-int *limit;
+static int
+glob1(Char *pattern, glob_t *pglob, int *limit)
 {
 	Char pathbuf[MAXPATHLEN];
 
 	/* A null pathname is invalid -- POSIX 1003.1 sect. 2.4. */
 	if (*pattern == EOS)
-		return (0);
-	return (glob2 (pathbuf, pathbuf, pathbuf + MAXPATHLEN - 1, pattern, pglob, limit));
+		return(0);
+	return(glob2(pathbuf, pathbuf, pathbuf + MAXPATHLEN - 1,
+	    pattern, pglob, limit));
 }
 
 /*
@@ -463,10 +450,8 @@ int *limit;
  * of recursion for each segment in the pattern that contains one or more
  * meta characters.
  */
-static int glob2 (pathbuf, pathend, pathend_last, pattern, pglob, limit)
-Char *pathbuf, *pathend, *pathend_last, *pattern;
-glob_t *pglob;
-int *limit;
+static int
+glob2(Char *pathbuf, Char *pathend, Char *pathend_last, Char *pattern, glob_t *pglob, int *limit)
 {
 	struct stat sb;
 	Char *p, *q;
@@ -476,61 +461,54 @@ int *limit;
 	 * Loop over pattern segments until end of pattern or until
 	 * segment with meta character found.
 	 */
-	for (anymeta = 0;;)
-	{
-		if (*pattern == EOS)
-		{ /* End of pattern? */
+	for (anymeta = 0;;) {
+		if (*pattern == EOS) {		/* End of pattern? */
 			*pathend = EOS;
-			if (g_lstat (pathbuf, &sb, pglob))
-				return (0);
+			if (g_lstat(pathbuf, &sb, pglob))
+				return(0);
 
-			if (((pglob->gl_flags & GLOB_MARK) && pathend[-1] != SEP) &&
-			    (S_ISDIR (sb.st_mode) ||
-			        (S_ISLNK (sb.st_mode) && (g_stat (pathbuf, &sb, pglob) == 0) &&
-			            S_ISDIR (sb.st_mode))))
-			{
+			if (((pglob->gl_flags & GLOB_MARK) &&
+			    pathend[-1] != SEP) && (S_ISDIR(sb.st_mode)
+			    || (S_ISLNK(sb.st_mode) &&
+			    (g_stat(pathbuf, &sb, pglob) == 0) &&
+			    S_ISDIR(sb.st_mode)))) {
 				if (pathend + 1 > pathend_last)
 					return (1);
 				*pathend++ = SEP;
-				*pathend   = EOS;
+				*pathend = EOS;
 			}
 			++pglob->gl_matchc;
-			return (globextend (pathbuf, pglob, limit));
+			return(globextend(pathbuf, pglob, limit));
 		}
 
 		/* Find end of next segment, copy tentatively to pathend. */
 		q = pathend;
 		p = pattern;
-		while (*p != EOS && *p != SEP)
-		{
-			if (ismeta (*p))
+		while (*p != EOS && *p != SEP) {
+			if (ismeta(*p))
 				anymeta = 1;
 			if (q + 1 > pathend_last)
 				return (1);
 			*q++ = *p++;
 		}
 
-		if (!anymeta)
-		{ /* No expansion, do next segment. */
+		if (!anymeta) {		/* No expansion, do next segment. */
 			pathend = q;
 			pattern = p;
-			while (*pattern == SEP)
-			{
+			while (*pattern == SEP) {
 				if (pathend + 1 > pathend_last)
 					return (1);
 				*pathend++ = *pattern++;
 			}
-		}
-		else /* Need expansion, recurse. */
-			return (glob3 (pathbuf, pathend, pathend_last, pattern, p, pglob, limit));
+		} else			/* Need expansion, recurse. */
+			return(glob3(pathbuf, pathend, pathend_last, pattern, p,
+			    pglob, limit));
 	}
 	/* NOTREACHED */
 }
 
-static int glob3 (pathbuf, pathend, pathend_last, pattern, restpattern, pglob, limit)
-Char *pathbuf, *pathend, *pathend_last, *pattern, *restpattern;
-glob_t *pglob;
-int *limit;
+static int
+glob3(Char *pathbuf, Char *pathend, Char *pathend_last, Char *pattern, Char *restpattern, glob_t *pglob, int *limit)
 {
 	struct dirent *dp;
 	DIR *dirp;
@@ -543,35 +521,33 @@ int *limit;
 	 * and dirent.h as taking pointers to differently typed opaque
 	 * structures.
 	 */
-	struct dirent *(*readdirfunc) ();
+	struct dirent *(*readdirfunc)(DIR *);
 
 	if (pathend > pathend_last)
 		return (1);
 	*pathend = EOS;
-	errno    = 0;
+	errno = 0;
 
-	if ((dirp = g_opendir (pathbuf, pglob)) == NULL)
-	{
+	if ((dirp = g_opendir(pathbuf, pglob)) == NULL) {
 		/* TODO: don't call for ENOENT or ENOTDIR? */
-		if (pglob->gl_errfunc)
-		{
-			if (g_Ctoc (pathbuf, buf, sizeof (buf)))
+		if (pglob->gl_errfunc) {
+			if (g_Ctoc(pathbuf, buf, sizeof(buf)))
 				return (GLOB_ABEND);
-			if (pglob->gl_errfunc (buf, errno) || pglob->gl_flags & GLOB_ERR)
+			if (pglob->gl_errfunc(buf, errno) ||
+			    pglob->gl_flags & GLOB_ERR)
 				return (GLOB_ABEND);
 		}
-		return (0);
+		return(0);
 	}
 
 	err = 0;
 
 	/* Search directory for matching names. */
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
-		readdirfunc = pglob->gl_readdir;
+		readdirfunc = (void*)pglob->gl_readdir;
 	else
 		readdirfunc = readdir;
-	while ((dp = (*readdirfunc) (dirp)))
-	{
+	while ((dp = (*readdirfunc)(dirp))) {
 		u_char *sc;
 		Char *dc;
 
@@ -579,25 +555,26 @@ int *limit;
 		if (dp->d_name[0] == DOT && *pattern != DOT)
 			continue;
 		dc = pathend;
-		sc = (u_char *)dp->d_name;
+		sc = (u_char *) dp->d_name;
 		while (dc < pathend_last && (*dc++ = *sc++) != EOS)
 			;
-		if (!match (pathend, pattern, restpattern))
-		{
+		if (!match(pathend, pattern, restpattern)) {
 			*pathend = EOS;
 			continue;
 		}
-		err = glob2 (pathbuf, --dc, pathend_last, restpattern, pglob, limit);
+		err = glob2(pathbuf, --dc, pathend_last, restpattern,
+		    pglob, limit);
 		if (err)
 			break;
 	}
 
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
-		(*pglob->gl_closedir) (dirp);
+		(*pglob->gl_closedir)(dirp);
 	else
-		closedir (dirp);
-	return (err);
+		closedir(dirp);
+	return(err);
 }
+
 
 /*
  * Extend the gl_pathv member of a glob_t structure to accomodate a new item,
@@ -613,9 +590,8 @@ int *limit;
  *	Either gl_pathc is zero and gl_pathv is NULL; or gl_pathc > 0 and
  *	gl_pathv points to (gl_offs + gl_pathc + 1) items.
  */
-static int globextend (path, pglob, limit) const Char *path;
-glob_t *pglob;
-int *limit;
+static int
+globextend(const Char *path, glob_t *pglob, int *limit)
 {
 	char **pathv;
 	int i;
@@ -623,29 +599,27 @@ int *limit;
 	char *copy;
 	const Char *p;
 
-	if (*limit && pglob->gl_pathc > *limit)
-	{
+	if (*limit && pglob->gl_pathc > *limit) {
 		errno = 0;
 		return (GLOB_NOSPACE);
 	}
 
-	newsize = sizeof (*pathv) * (2 + pglob->gl_pathc + pglob->gl_offs);
-	pathv   = pglob->gl_pathv ? realloc ((char *)pglob->gl_pathv, newsize) : malloc (newsize);
-	if (pathv == NULL)
-	{
-		if (pglob->gl_pathv)
-		{
-			free (pglob->gl_pathv);
+	newsize = sizeof(*pathv) * (2 + pglob->gl_pathc + pglob->gl_offs);
+	pathv = pglob->gl_pathv ?
+		    realloc((char *)pglob->gl_pathv, newsize) :
+		    malloc(newsize);
+	if (pathv == NULL) {
+		if (pglob->gl_pathv) {
+			free(pglob->gl_pathv);
 			pglob->gl_pathv = NULL;
 		}
-		return (GLOB_NOSPACE);
+		return(GLOB_NOSPACE);
 	}
 
-	if (pglob->gl_pathv == NULL && pglob->gl_offs > 0)
-	{
+	if (pglob->gl_pathv == NULL && pglob->gl_offs > 0) {
 		/* first time around -- clear initial gl_offs items */
 		pathv += pglob->gl_offs;
-		for (i = pglob->gl_offs; --i >= 0;)
+		for (i = pglob->gl_offs; --i >= 0; )
 			*--pathv = NULL;
 	}
 	pglob->gl_pathv = pathv;
@@ -653,165 +627,149 @@ int *limit;
 	for (p = path; *p++;)
 		continue;
 	len = (size_t)(p - path);
-	if ((copy = malloc (len)) != NULL)
-	{
-		if (g_Ctoc (path, copy, len))
-		{
-			free (copy);
+	if ((copy = malloc(len)) != NULL) {
+		if (g_Ctoc(path, copy, len)) {
+			free(copy);
 			return (GLOB_NOSPACE);
 		}
 		pathv[pglob->gl_offs + pglob->gl_pathc++] = copy;
 	}
 	pathv[pglob->gl_offs + pglob->gl_pathc] = NULL;
-	return (copy == NULL ? GLOB_NOSPACE : 0);
+	return(copy == NULL ? GLOB_NOSPACE : 0);
 }
 
 /*
  * pattern matching function for filenames.  Each occurrence of the *
  * pattern causes a recursion level.
  */
-static int match (name, pat, patend)
-Char *name, *pat, *patend;
+static int
+match(Char *name, Char *pat, Char *patend)
 {
 	int ok, negate_range;
 	Char c, k;
 
-	while (pat < patend)
-	{
+	while (pat < patend) {
 		c = *pat++;
-		switch (c & M_MASK)
-		{
+		switch (c & M_MASK) {
 		case M_ALL:
 			if (pat == patend)
-				return (1);
+				return(1);
 			do
-				if (match (name, pat, patend))
-					return (1);
+			    if (match(name, pat, patend))
+				    return(1);
 			while (*name++ != EOS);
-			return (0);
+			return(0);
 		case M_ONE:
 			if (*name++ == EOS)
-				return (0);
+				return(0);
 			break;
 		case M_SET:
 			ok = 0;
 			if ((k = *name++) == EOS)
-				return (0);
+				return(0);
 			if ((negate_range = ((*pat & M_MASK) == M_NOT)) != EOS)
 				++pat;
 			while (((c = *pat++) & M_MASK) != M_END)
-				if ((*pat & M_MASK) == M_RNG)
-				{
-					if (__collate_load_error
-					        ? CHAR (c) <= CHAR (k) && CHAR (k) <= CHAR (pat[1])
-					        : __collate_range_cmp (CHAR (c), CHAR (k)) <= 0 &&
-					              __collate_range_cmp (CHAR (k), CHAR (pat[1])) <= 0)
+				if ((*pat & M_MASK) == M_RNG) {
+					if (__collate_load_error ?
+					    CHAR(c) <= CHAR(k) && CHAR(k) <= CHAR(pat[1]) :
+					       __collate_range_cmp(CHAR(c), CHAR(k)) <= 0
+					    && __collate_range_cmp(CHAR(k), CHAR(pat[1])) <= 0
+					   )
 						ok = 1;
 					pat += 2;
-				}
-				else if (c == k)
+				} else if (c == k)
 					ok = 1;
 			if (ok == negate_range)
-				return (0);
+				return(0);
 			break;
 		default:
 			if (*name++ != c)
-				return (0);
+				return(0);
 			break;
 		}
 	}
-	return (*name == EOS);
+	return(*name == EOS);
 }
 
 /* Free allocated data belonging to a glob_t structure. */
-void globfree (pglob) glob_t *pglob;
+void
+globfree(glob_t *pglob)
 {
 	int i;
 	char **pp;
 
-	if (pglob->gl_pathv != NULL)
-	{
+	if (pglob->gl_pathv != NULL) {
 		pp = pglob->gl_pathv + pglob->gl_offs;
 		for (i = pglob->gl_pathc; i--; ++pp)
 			if (*pp)
-				free (*pp);
-		free (pglob->gl_pathv);
+				free(*pp);
+		free(pglob->gl_pathv);
 		pglob->gl_pathv = NULL;
 	}
 }
 
-static DIR *g_opendir (str, pglob)
-Char *str;
-glob_t *pglob;
+static DIR *
+g_opendir(Char *str, glob_t *pglob)
 {
 	char buf[MAXPATHLEN];
 
 	if (!*str)
-		strcpy (buf, ".");
-	else
-	{
-		if (g_Ctoc (str, buf, sizeof (buf)))
+		strcpy(buf, ".");
+	else {
+		if (g_Ctoc(str, buf, sizeof(buf)))
 			return (NULL);
 	}
 
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
-		return ((*pglob->gl_opendir) (buf));
+		return((*pglob->gl_opendir)(buf));
 
-	return (opendir (buf));
+	return(opendir(buf));
 }
 
-static int g_lstat (fn, sb, pglob)
-Char *fn;
-struct stat *sb;
-glob_t *pglob;
+static int
+g_lstat(Char *fn, struct stat *sb, glob_t *pglob)
 {
 	char buf[MAXPATHLEN];
 
-	if (g_Ctoc (fn, buf, sizeof (buf)))
-	{
+	if (g_Ctoc(fn, buf, sizeof(buf))) {
 		errno = ENAMETOOLONG;
 		return (-1);
 	}
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
-		return ((*pglob->gl_lstat) (buf, sb));
-	return (lstat (buf, sb));
+		return((*pglob->gl_lstat)(buf, sb));
+	return(lstat(buf, sb));
 }
 
-static int g_stat (fn, sb, pglob)
-Char *fn;
-struct stat *sb;
-glob_t *pglob;
+static int
+g_stat(Char *fn, struct stat *sb, glob_t *pglob)
 {
 	char buf[MAXPATHLEN];
 
-	if (g_Ctoc (fn, buf, sizeof (buf)))
-	{
+	if (g_Ctoc(fn, buf, sizeof(buf))) {
 		errno = ENAMETOOLONG;
 		return (-1);
 	}
 	if (pglob->gl_flags & GLOB_ALTDIRFUNC)
-		return ((*pglob->gl_stat) (buf, sb));
-	return (stat (buf, sb));
+		return((*pglob->gl_stat)(buf, sb));
+	return(stat(buf, sb));
 }
 
-static Char *g_strchr (str, ch)
-Char *str;
-int ch;
+static Char *
+g_strchr(Char *str, int ch)
 {
-	do
-	{
+	do {
 		if (*str == ch)
 			return (str);
 	} while (*str++);
 	return (NULL);
 }
 
-static int g_Ctoc (str, buf, len) const Char *str;
-char *buf;
-u_int len;
+static int
+g_Ctoc(const Char *str, char *buf, u_int len)
 {
-	while (len--)
-	{
+
+	while (len--) {
 		if ((*buf++ = *str++) == '\0')
 			return (0);
 	}
@@ -819,21 +777,21 @@ u_int len;
 }
 
 #ifdef DEBUG
-static void qprintf (str, s) const char *str;
-Char *s;
+static void
+qprintf(const char *str, Char *s)
 {
 	Char *p;
 
-	(void)printf ("%s:\n", str);
+	(void)printf("%s:\n", str);
 	for (p = s; *p; p++)
-		(void)printf ("%c", CHAR (*p));
-	(void)printf ("\n");
+		(void)printf("%c", CHAR(*p));
+	(void)printf("\n");
 	for (p = s; *p; p++)
-		(void)printf ("%c", *p & M_PROTECT ? '"' : ' ');
-	(void)printf ("\n");
+		(void)printf("%c", *p & M_PROTECT ? '"' : ' ');
+	(void)printf("\n");
 	for (p = s; *p; p++)
-		(void)printf ("%c", ismeta (*p) ? '_' : ' ');
-	(void)printf ("\n");
+		(void)printf("%c", ismeta(*p) ? '_' : ' ');
+	(void)printf("\n");
 }
 #endif
 #endif /*  !_NO_GLOB */
