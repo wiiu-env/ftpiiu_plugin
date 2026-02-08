@@ -52,7 +52,7 @@ constexpr std::uint16_t DEFAULT_PORT = 21;
 constexpr std::uint16_t DEFAULT_PORT = 5000;
 #endif
 
-constexpr int DEFAULT_DEFLATE_LEVEL  = 6;
+constexpr int DEFAULT_DEFLATE_LEVEL = 6;
 
 bool mkdirParent (std::string_view const path_)
 {
