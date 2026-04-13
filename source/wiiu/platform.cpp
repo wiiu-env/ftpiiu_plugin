@@ -285,7 +285,7 @@ WUPSConfigAPICallbackStatus ConfigMenuOpenedCallback (WUPSConfigCategoryHandle r
 		{
 			snprintf (ipSettings,
 			    50,
-			    "IP of your console is %u.%u.%u.%u. Port %i",
+			    "IP of your console is %u.%u.%u.%u  Port %i",
 			    (hostIpAddress >> 24) & 0xFF,
 			    (hostIpAddress >> 16) & 0xFF,
 			    (hostIpAddress >> 8) & 0xFF,
